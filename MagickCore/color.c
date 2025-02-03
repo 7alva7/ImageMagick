@@ -1186,8 +1186,11 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
       color=pixel->red;
       if (IsHueCompatibleColorspace(pixel->colorspace) != MagickFalse)
         scale=360.0f;
-      if ((compliance != NoCompliance) && (pixel->colorspace == LabColorspace))
+      if ((compliance != NoCompliance) &&
+          (IsLabCompatibleColorspace(pixel->colorspace) != MagickFalse))
         scale=100.0f;
+      if (pixel->colorspace == XYZColorspace)
+        color/=2.55f;
       break;
     }
     case GreenPixelChannel:
@@ -1195,8 +1198,11 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
       color=pixel->green;
       if (IsHueCompatibleColorspace(pixel->colorspace) != MagickFalse)
         scale=100.0f;
-      if ((compliance != NoCompliance) && (pixel->colorspace == LabColorspace))
+      if ((compliance != NoCompliance) &&
+          (IsLabCompatibleColorspace(pixel->colorspace) != MagickFalse))
         color-=QuantumRange/2.0f;
+      if (pixel->colorspace == XYZColorspace)
+        color/=2.55f;
       break;
     }
     case BluePixelChannel:
@@ -1206,6 +1212,12 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
         scale=100.0f;
       if (pixel->colorspace == LabColorspace)
         color-=QuantumRange/2.0f;
+      if ((pixel->colorspace == LCHColorspace) ||
+          (pixel->colorspace == LCHabColorspace) ||
+          (pixel->colorspace == LCHuvColorspace))
+        color*=360.0f/255.0f;
+      if (pixel->colorspace == XYZColorspace)
+        color/=2.55f;
       break;
     }
     case AlphaPixelChannel:
@@ -1228,7 +1240,8 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
     default:
       break;
   }
-  if ((scale != 100.0f) || (pixel->colorspace == LabColorspace))
+  if ((scale != 100.0f) ||
+      (IsLabCompatibleColorspace(pixel->colorspace) != MagickFalse))
     (void) FormatLocaleString(component,MagickPathExtent,"%.*g",
       GetMagickPrecision(),(double) scale*QuantumScale*(double) color);
   else
@@ -2237,7 +2250,7 @@ static MagickStatusType ParseCSSColor(const char *magick_restrict color,
         geometry_info->rho=intensity;
         flags|=RhoValue;
         if (LocaleNCompare(q,"deg",3) == 0)
-          q+=3;
+          q+=(ptrdiff_t) 3;
         break;
       }
       case 1:
@@ -2537,7 +2550,7 @@ MagickExport MagickBooleanType QueryColorCompliance(const char *name,
           (color->alpha_trait != UndefinedPixelTrait))
         color->alpha=(double) ClampToQuantum((double) QuantumRange*
           geometry_info.chi);
-      if (color->colorspace == LabColorspace)
+      if (IsLabCompatibleColorspace(color->colorspace) != MagickFalse)
         {
           color->red=(MagickRealType) ClampToQuantum((MagickRealType)
             ((double) QuantumRange*geometry_info.rho/100.0));

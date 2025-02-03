@@ -60,7 +60,7 @@
 #include "MagickCore/monitor-private.h"
 #include "MagickCore/option.h"
 #include "MagickCore/pixel-accessor.h"
-#include "MagickCore/profile.h"
+#include "MagickCore/profile-private.h"
 #include "MagickCore/property.h"
 #include "MagickCore/quantum-private.h"
 #include "MagickCore/resource_.h"
@@ -75,6 +75,22 @@
 
 #define OPJ_COMPUTE_NUMERIC_VERSION(major,minor,patch) ((major<<24) | (minor<<16) | (patch<<8) | 0)
 #define OPJ_NUMERIC_VERSION OPJ_COMPUTE_NUMERIC_VERSION(OPJ_VERSION_MAJOR,OPJ_VERSION_MINOR,OPJ_VERSION_BUILD)
+#endif
+
+/*
+  Typedef declarations.
+*/
+#if defined(MAGICKCORE_JPEG_DELEGATE)
+typedef struct _JP2CompsInfo
+{
+  double
+    scale;
+
+  ssize_t
+    addition,
+    pad,
+    y_index;
+} JP2CompsInfo;
 #endif
 
 /*
@@ -277,11 +293,17 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
   int
     jp2_status;
 
+  JP2CompsInfo
+    comps_info[MaxPixelChannels];
+
   MagickBooleanType
     status;
 
   opj_codec_t
     *jp2_codec;
+
+  opj_codestream_info_v2_t
+    *jp2_codestream_info;
 
   opj_dparameters_t
     parameters;
@@ -356,15 +378,29 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
   opj_stream_set_skip_function(jp2_stream,JP2SkipHandler);
   opj_stream_set_user_data(jp2_stream,image,NULL);
   opj_stream_set_user_data_length(jp2_stream,GetBlobSize(image));
+  jp2_image=(opj_image_t *) NULL;
   if (opj_read_header(jp2_stream,jp2_codec,&jp2_image) == 0)
     {
       opj_stream_destroy(jp2_stream);
       opj_destroy_codec(jp2_codec);
       ThrowReaderException(DelegateError,"UnableToDecodeImageFile");
     }
+  jp2_codestream_info=opj_get_cstr_info(jp2_codec);
+  if (AcquireMagickResource(ListLengthResource,(MagickSizeType)
+       jp2_codestream_info->m_default_tile_info.numlayers) == MagickFalse)
+    {
+      opj_destroy_cstr_info(&jp2_codestream_info);
+      opj_stream_destroy(jp2_stream);
+      opj_destroy_codec(jp2_codec);
+      opj_image_destroy(jp2_image);
+      ThrowReaderException(ResourceLimitError,"ListLengthExceedsLimit");
+    }
+  opj_destroy_cstr_info(&jp2_codestream_info);
   jp2_status=OPJ_TRUE;
   if ((AcquireMagickResource(WidthResource,(size_t) jp2_image->comps[0].w) == MagickFalse) ||
-      (AcquireMagickResource(HeightResource,(size_t) jp2_image->comps[0].h) == MagickFalse))
+      (AcquireMagickResource(WidthResource,(size_t) jp2_image->x1) == MagickFalse) ||
+      (AcquireMagickResource(HeightResource,(size_t) jp2_image->comps[0].h) == MagickFalse) ||
+      (AcquireMagickResource(HeightResource,(size_t) jp2_image->y1) == MagickFalse))
     {
       opj_stream_destroy(jp2_stream);
       opj_destroy_codec(jp2_codec);
@@ -410,7 +446,12 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
       ThrowReaderException(DelegateError,"UnableToDecodeImageFile");
     }
   if (jp2_image->numcomps >= MaxPixelChannels)
-    ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+    {
+      opj_stream_destroy(jp2_stream);
+      opj_destroy_codec(jp2_codec);
+      opj_image_destroy(jp2_image);
+      ThrowReaderException(CorruptImageError,"ImproperImageHeader");
+    }
   for (i=0; i < (ssize_t) jp2_image->numcomps; i++)
   {
     if ((jp2_image->comps[i].dx == 0) || (jp2_image->comps[i].dy == 0) ||
@@ -463,8 +504,16 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
           number_meta_channels-=1;
         }
       if (number_meta_channels > 0)
-        (void) SetPixelMetaChannels(image,(size_t) number_meta_channels,
-          exception);
+        {
+          status=SetPixelMetaChannels(image,(size_t) number_meta_channels,
+            exception);
+          if (status == MagickFalse)
+            {
+              opj_destroy_codec(jp2_codec);
+              opj_image_destroy(jp2_image);
+              return(DestroyImageList(image));
+            }
+        }
     }
   else if (jp2_image->numcomps == 2)
     {
@@ -478,13 +527,9 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
       StringInfo
         *profile;
 
-      profile=BlobToStringInfo(jp2_image->icc_profile_buf,
-        jp2_image->icc_profile_len);
-      if (profile != (StringInfo *) NULL)
-        {
-          SetImageProfile(image,"icc",profile,exception);
-          profile=DestroyStringInfo(profile);
-        }
+      profile=BlobToProfileStringInfo("icc",jp2_image->icc_profile_buf,
+        jp2_image->icc_profile_len,exception);
+      (void) SetImageProfilePrivate(image,profile,exception);
     }
   if (image->ping != MagickFalse)
     {
@@ -499,6 +544,15 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
       opj_image_destroy(jp2_image);
       return(DestroyImageList(image));
     }
+  memset(comps_info,0,MaxPixelChannels*sizeof(JP2CompsInfo));
+  for (i=0; i < (ssize_t) jp2_image->numcomps; i++)
+  {
+    comps_info[i].scale=(double) QuantumRange/(double) 
+      ((MagickULLConstant(1) << jp2_image->comps[i].prec)-1);
+    comps_info[i].addition=(jp2_image->comps[i].sgnd ?
+      MagickULLConstant(1) << (jp2_image->comps[i].prec-1) : 0);
+    comps_info[i].pad=(ssize_t) image->columns % jp2_image->comps[i].dx;
+  }
   for (y=0; y < (ssize_t) image->rows; y++)
   {
     Quantum
@@ -507,6 +561,11 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
     ssize_t
       x;
 
+    for (i=0; i < (ssize_t) jp2_image->numcomps; i++)
+    {
+      comps_info[i].y_index=y/jp2_image->comps[i].dy*((ssize_t) image->columns+
+        comps_info[i].pad);
+    }
     q=GetAuthenticPixels(image,0,y,image->columns,1,exception);
     if (q == (Quantum *) NULL)
       break;
@@ -515,16 +574,13 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
       for (i=0; i < (ssize_t) jp2_image->numcomps; i++)
       {
         double
-          pixel,
-          scale;
+          pixel;
 
         ssize_t
-          index,
-          pad;
+          index;
 
-        pad=(ssize_t) image->columns % jp2_image->comps[i].dx;
-        index=y/jp2_image->comps[i].dy*((ssize_t) image->columns+pad)/
-          jp2_image->comps[i].dx+x/jp2_image->comps[i].dx;
+        index=comps_info[i].y_index/jp2_image->comps[i].dx+x/
+          jp2_image->comps[i].dx;
         if ((index < 0) ||
             (index >= (jp2_image->comps[i].h*jp2_image->comps[i].w)))
           {
@@ -533,11 +589,8 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
             ThrowReaderException(CoderError,
               "IrregularChannelGeometryNotSupported")
           }
-        scale=(double) QuantumRange/(double) ((MagickULLConstant(1) <<
-          jp2_image->comps[i].prec)-1);
-        pixel=scale*(jp2_image->comps[i].data[index]+(ssize_t) 
-          (jp2_image->comps[i].sgnd ? MagickULLConstant(1) <<
-          (jp2_image->comps[i].prec-1) : 0));
+        pixel=comps_info[i].scale*(jp2_image->comps[i].data[index]+
+          comps_info[i].addition);
         switch (i)
         {
           case 0:
@@ -550,8 +603,11 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
                 break;
               }
             SetPixelRed(image,ClampToQuantum(pixel),q);
-            SetPixelGreen(image,ClampToQuantum(pixel),q);
-            SetPixelBlue(image,ClampToQuantum(pixel),q);
+            if (jp2_image->numcomps == 2)
+              {
+                SetPixelGreen(image,ClampToQuantum(pixel),q);
+                SetPixelBlue(image,ClampToQuantum(pixel),q);
+              }
             break;
           }
           case 1:
@@ -590,7 +646,7 @@ static Image *ReadJP2Image(const ImageInfo *image_info,ExceptionInfo *exception)
           }
         }
       }
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncAuthenticPixels(image,exception) == MagickFalse)
       break;
@@ -1172,7 +1228,7 @@ static MagickBooleanType WriteJP2Image(const ImageInfo *image_info,Image *image,
           }
         }
       }
-      p+=GetPixelChannels(image);
+      p+=(ptrdiff_t) GetPixelChannels(image);
     }
     status=SetImageProgress(image,SaveImageTag,(MagickOffsetType) y,
       image->rows);

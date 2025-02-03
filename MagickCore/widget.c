@@ -1171,7 +1171,8 @@ static void XEditText(Display *display,XWidgetInfo *text_info,
           q=text_info->text+Extent(text_info->text)+strlen(text);
           for (i=0; i <= Extent(text_info->cursor); i++)
           {
-            *q=(*(q-Extent(text)));
+            if ((q-Extent(text)) > text_info->text)
+              *q=(*(q-Extent(text)));
             q--;
           }
           p=text;
@@ -1802,8 +1803,8 @@ MagickPrivate void XColorBrowserWidget(Display *display,XWindows *windows,
         XGetWidgetInfo(action,&action_info);
         action_info.width=width;
         action_info.height=(unsigned int) ((3*height) >> 1);
-        action_info.x=cancel_info.x-(int) cancel_info.width+
-          (QuantumMargin >> 1)+(int) (action_info.bevel_width << 1);
+        action_info.x=(int) windows->widget.width-(int) action_info.width-
+          (int) cancel_info.width-2*QuantumMargin-2;
         action_info.y=cancel_info.y;
         XGetWidgetInfo(GrabButtonText,&grab_info);
         grab_info.width=width;
@@ -5688,8 +5689,8 @@ MagickPrivate void XFontBrowserWidget(Display *display,XWindows *windows,
         XGetWidgetInfo(action,&action_info);
         action_info.width=width;
         action_info.height=(unsigned int) ((3*height) >> 1);
-        action_info.x=cancel_info.x-(int) cancel_info.width+
-          (QuantumMargin >> 1)+(int) (action_info.bevel_width << 1);
+        action_info.x=(int) windows->widget.width-(int) action_info.width-
+          (int) cancel_info.width-2*QuantumMargin-2;
         action_info.y=cancel_info.y;
         XGetWidgetInfo(BackButtonText,&back_info);
         back_info.width=width;

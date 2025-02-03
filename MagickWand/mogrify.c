@@ -59,6 +59,7 @@
 #include "MagickCore/geometry-private.h"
 #include "MagickCore/image-private.h"
 #include "MagickCore/monitor-private.h"
+#include "MagickCore/profile-private.h"
 #include "MagickCore/string-private.h"
 #include "MagickCore/thread-private.h"
 #include "MagickCore/timer-private.h"
@@ -2717,15 +2718,16 @@ WandExport MagickBooleanType MogrifyImage(ImageInfo *image_info,const int argc,
                     StringInfo
                       *profile = (StringInfo *) NULL;
 
-                    (void) CopyMagickString(image_info->filename,value,MagickPathExtent);
+                    (void) CopyMagickString(image_info->filename,value,
+                      MagickPathExtent);
                     (void) SetImageInfo(image_info,1,exception);
                     if (LocaleCompare(image_info->filename,"-") != 0)
-                      profile=FileToStringInfo(image_info->filename,~0UL,exception);
+                      profile=FileToStringInfo(image_info->filename,~0UL,
+                        exception);
                     if (profile != (StringInfo *) NULL)
                       {
-                        status=SetImageProfile(*image,image_info->magick,profile,
-                          exception);
-                        profile=DestroyStringInfo(profile);
+                        SetStringInfoName(profile,image_info->magick);
+                        status=SetImageProfilePrivate(*image,profile,exception);
                       }
                   }
                 else
@@ -3756,7 +3758,7 @@ WandExport MagickBooleanType MogrifyImageCommand(ImageInfo *image_info,
   MagickBooleanType
     fire,
     pend,
-    respect_parenthesis;
+    respect_parentheses;
 
   MagickStatusType
     status;
@@ -3803,7 +3805,7 @@ WandExport MagickBooleanType MogrifyImageCommand(ImageInfo *image_info,
   NewImageStack();
   option=(char *) NULL;
   pend=MagickFalse;
-  respect_parenthesis=MagickFalse;
+  respect_parentheses=MagickFalse;
   status=MagickTrue;
   /*
     Parse command line.
@@ -3924,7 +3926,6 @@ WandExport MagickBooleanType MogrifyImageCommand(ImageInfo *image_info,
           exception);
         if (status != MagickFalse)
           {
-#if defined(MAGICKCORE_HAVE_UTIME)
             {
               MagickBooleanType
                 preserve_timestamp;
@@ -3934,7 +3935,6 @@ WandExport MagickBooleanType MogrifyImageCommand(ImageInfo *image_info,
               if (preserve_timestamp != MagickFalse)
                 (void) set_file_timestamp(image->filename,&properties);
             }
-#endif
             if (*backup_filename != '\0')
               (void) remove_utf8(backup_filename);
           }
@@ -5910,9 +5910,10 @@ WandExport MagickBooleanType MogrifyImageCommand(ImageInfo *image_info,
               ThrowMogrifyInvalidArgumentException(option,argv[i]);
             break;
           }
-        if (LocaleNCompare("respect-parentheses",option+1,17) == 0)
+        if ((LocaleNCompare("respect-parentheses",option+1,17) == 0) ||
+            (LocaleNCompare("respect-parenthesis",option+1,17) == 0))
           {
-            respect_parenthesis=(*option == '-') ? MagickTrue : MagickFalse;
+            respect_parentheses=(*option == '-') ? MagickTrue : MagickFalse;
             break;
           }
         if (LocaleCompare("reverse",option+1) == 0)
@@ -8329,7 +8330,6 @@ WandExport MagickBooleanType MogrifyImageList(ImageInfo *image_info,
             Image
               *fx_image;
 
-puts("list");
             (void) SyncImagesSettings(mogrify_info,*images,exception);
             fx_image=FxImage(*images,argv[i+1],exception);
             if (fx_image == (Image *) NULL)

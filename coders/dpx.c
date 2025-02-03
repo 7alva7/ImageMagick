@@ -17,7 +17,7 @@
 %                                March 2001                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright @ 2001 ImageMagick Studio LLC, a non-profit organization         %
+%  Copyright @ 1999 ImageMagick Studio LLC, a non-profit organization         %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -60,7 +60,7 @@
 #include "MagickCore/monitor-private.h"
 #include "MagickCore/option.h"
 #include "MagickCore/pixel-accessor.h"
-#include "MagickCore/profile.h"
+#include "MagickCore/profile-private.h"
 #include "MagickCore/property.h"
 #include "MagickCore/quantum-private.h"
 #include "MagickCore/static.h"
@@ -1107,21 +1107,24 @@ static Image *ReadDPXImage(const ImageInfo *image_info,ExceptionInfo *exception)
       if ((dpx.file.user_size != ~0U) &&
           ((size_t) dpx.file.user_size > sizeof(dpx.user.id)))
         {
+          size_t
+            length;
+
           StringInfo
             *profile;
 
-           if ((MagickSizeType) dpx.file.user_size > GetBlobSize(image))
-             ThrowReaderException(CorruptImageError,
-               "InsufficientImageDataInFile");
-           profile=BlobToStringInfo((const unsigned char *) NULL,
-             dpx.file.user_size-sizeof(dpx.user.id));
-           if (profile == (StringInfo *) NULL)
-             ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
-           offset+=ReadBlob(image,GetStringInfoLength(profile),
-             GetStringInfoDatum(profile));
-           if (EOFBlob(image) != MagickFalse)
-             (void) SetImageProfile(image,"dpx:user-data",profile,exception);
-           profile=DestroyStringInfo(profile);
+          length=dpx.file.user_size-sizeof(dpx.user.id);
+          if ((MagickSizeType) length > GetBlobSize(image))
+            ThrowReaderException(CorruptImageError,
+              "InsufficientImageDataInFile");
+          profile=AcquireProfileStringInfo("dpx:user-data",length,exception);
+          if (profile == (StringInfo *) NULL)
+            offset=SeekBlob(image,(MagickOffsetType) length,SEEK_CUR);
+          else
+            {
+              offset+=ReadBlob(image,length,GetStringInfoDatum(profile));
+              (void) SetImageProfilePrivate(image,profile,exception);
+            }
         }
     }
   for ( ; offset < (MagickOffsetType) dpx.file.image_offset; offset++)

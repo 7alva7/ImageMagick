@@ -141,7 +141,7 @@ static MagickBooleanType ChannelImage(Image *destination_image,
   destination_view=AcquireAuthenticCacheView(destination_image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) shared(status) \
-    magick_number_threads(source_image,source_image,height,1)
+    magick_number_threads(source_image,source_image,height,4)
 #endif
   for (y=0; y < (ssize_t) height; y++)
   {
@@ -182,8 +182,8 @@ static MagickBooleanType ChannelImage(Image *destination_image,
       else
         SetPixelChannel(destination_image,destination_channel,
           GetPixelChannel(source_image,source_channel,p),q);
-      p+=GetPixelChannels(source_image);
-      q+=GetPixelChannels(destination_image);
+      p+=(ptrdiff_t) GetPixelChannels(source_image);
+      q+=(ptrdiff_t) GetPixelChannels(destination_image);
     }
     if (SyncCacheViewAuthenticPixels(destination_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -570,6 +570,10 @@ MagickExport Image *CombineImages(const Image *image,
   status=MagickTrue;
   progress=0;
   combine_view=AcquireAuthenticCacheView(combine_image,exception);
+#if defined(MAGICKCORE_OPENMP_SUPPORT)
+  #pragma omp parallel for schedule(static) shared(progress,status) \
+    magick_number_threads(combine_image,combine_image,combine_image->rows,4)
+#endif
   for (y=0; y < (ssize_t) combine_image->rows; y++)
   {
     CacheView
@@ -578,13 +582,11 @@ MagickExport Image *CombineImages(const Image *image,
     const Image
       *next;
 
-    Quantum
-      *pixels;
-
     const Quantum
       *magick_restrict p;
 
     Quantum
+      *pixels,
       *magick_restrict q;
 
     ssize_t
@@ -621,9 +623,9 @@ MagickExport Image *CombineImages(const Image *image,
         if (x < (ssize_t) next->columns)
           {
             q[i]=GetPixelIntensity(next,p);
-            p+=GetPixelChannels(next);
+            p+=(ptrdiff_t) GetPixelChannels(next);
           }
-        q+=GetPixelChannels(combine_image);
+        q+=(ptrdiff_t) GetPixelChannels(combine_image);
       }
       image_view=DestroyCacheView(image_view);
       next=GetNextImageInList(next);
@@ -763,7 +765,7 @@ MagickExport Image *SeparateImage(const Image *image,
   separate_view=AcquireAuthenticCacheView(separate_image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) shared(progress,status) \
-    magick_number_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,2)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -801,8 +803,8 @@ MagickExport Image *SeparateImage(const Image *image,
           continue;
         SetPixelChannel(separate_image,GrayPixelChannel,p[i],q);
       }
-      p+=GetPixelChannels(image);
-      q+=GetPixelChannels(separate_image);
+      p+=(ptrdiff_t) GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(separate_image);
     }
     if (SyncCacheViewAuthenticPixels(separate_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -1014,7 +1016,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
       image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static) shared(status) \
-        magick_number_threads(image,image,image->rows,1)
+        magick_number_threads(image,image,image->rows,2)
 #endif
       for (y=0; y < (ssize_t) image->rows; y++)
       {
@@ -1052,7 +1054,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
               continue;
             q[i]=ClampToQuantum(gamma*(double) q[i]);
           }
-          q+=GetPixelChannels(image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
         }
         if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
           status=MagickFalse;
@@ -1074,7 +1076,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
       image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static) shared(status) \
-        magick_number_threads(image,image,image->rows,1)
+        magick_number_threads(image,image,image->rows,2)
 #endif
       for (y=0; y < (ssize_t) image->rows; y++)
       {
@@ -1100,7 +1102,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
               SetPixelViaPixelInfo(image,&image->background_color,q);
               SetPixelChannel(image,AlphaPixelChannel,TransparentAlpha,q);
             }
-          q+=GetPixelChannels(image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
         }
         if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
           status=MagickFalse;
@@ -1134,7 +1136,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
       image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static) shared(status) \
-        magick_number_threads(image,image,image->rows,1)
+        magick_number_threads(image,image,image->rows,2)
 #endif
       for (y=0; y < (ssize_t) image->rows; y++)
       {
@@ -1174,7 +1176,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
               continue;
             q[i]=ClampToQuantum(gamma*(double) q[i]);
           }
-          q+=GetPixelChannels(image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
         }
         if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
           status=MagickFalse;
@@ -1204,6 +1206,52 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
       image->alpha_trait=UndefinedPixelTrait;
       break;
     }
+    case OffIfOpaqueAlphaChannel:
+    {
+      MagickBooleanType
+        opaque = MagickTrue;
+
+      /*
+        Remove opaque alpha channel.
+      */
+      if ((image->alpha_trait & BlendPixelTrait) == 0)
+        break;
+      image_view=AcquireVirtualCacheView(image,exception);
+#if defined(MAGICKCORE_OPENMP_SUPPORT)
+      #pragma omp parallel for schedule(static) shared(opaque,status) \
+        magick_number_threads(image,image,image->rows,2)
+#endif
+      for (y=0; y < (ssize_t) image->rows; y++)
+      {
+        const Quantum
+          *magick_restrict p;
+
+        ssize_t
+          x;
+
+        if ((status == MagickFalse) || (opaque == MagickFalse))
+          continue;
+        p=GetCacheViewVirtualPixels(image_view,0,y,image->columns,1,exception);
+        if (p == (const Quantum *) NULL)
+          {
+            status=MagickFalse;
+            continue;
+          }
+        for (x=0; x < (ssize_t) image->columns; x++)
+        {
+          if (GetPixelAlpha(image,p) != OpaqueAlpha)
+            {
+              opaque=MagickFalse;
+              break;
+            }
+          p+=(ptrdiff_t) GetPixelChannels(image);
+        }
+      }
+      image_view=DestroyCacheView(image_view);
+      if (opaque != MagickFalse)
+        image->alpha_trait=UndefinedPixelTrait;
+      break;
+    }
     case OnAlphaChannel:
     {
       if ((image->alpha_trait & BlendPixelTrait) == 0)
@@ -1229,7 +1277,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
       image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static) shared(status) \
-        magick_number_threads(image,image,image->rows,1)
+        magick_number_threads(image,image,image->rows,2)
 #endif
       for (y=0; y < (ssize_t) image->rows; y++)
       {
@@ -1252,7 +1300,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
         {
           FlattenPixelInfo(image,&image->background_color,
             image->background_color.alpha,q,(double) GetPixelAlpha(image,q),q);
-          q+=GetPixelChannels(image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
         }
         if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
           status=MagickFalse;
@@ -1284,7 +1332,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
       image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static) shared(status) \
-        magick_number_threads(image,image,image->rows,1)
+        magick_number_threads(image,image,image->rows,2)
 #endif
       for (y=0; y < (ssize_t) image->rows; y++)
       {
@@ -1311,7 +1359,7 @@ MagickExport MagickBooleanType SetImageAlphaChannel(Image *image,
         {
           pixel.alpha=GetPixelIntensity(image,q);
           SetPixelViaPixelInfo(image,&pixel,q);
-          q+=GetPixelChannels(image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
         }
         if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
           status=MagickFalse;
