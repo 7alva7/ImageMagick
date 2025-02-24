@@ -23,7 +23,7 @@
 %                                 August 2003                                 %
 %                                                                             %
 %                                                                             %
-%  Copyright @ 2003 ImageMagick Studio LLC, a non-profit organization         %
+%  Copyright @ 1999 ImageMagick Studio LLC, a non-profit organization         %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -51,6 +51,7 @@
 #include "MagickWand/magick-wand-private.h"
 #include "MagickWand/wand.h"
 #include "MagickCore/image-private.h"
+#include "MagickCore/profile-private.h"
 #include "MagickCore/string-private.h"
 
 /*
@@ -608,7 +609,7 @@ WandExport char *MagickGetImageArtifact(MagickWand *wand,const char *artifact)
 %                                                                             %
 %                                                                             %
 %                                                                             %
-%   M a g i c k G e t I m a g e P r o p e r t i e s                           %
+%   M a g i c k G e t I m a g e A r t i f a c t s                             %
 %                                                                             %
 %                                                                             %
 %                                                                             %
@@ -642,11 +643,11 @@ WandExport char **MagickGetImageArtifacts(MagickWand *wand,
   const char
     *artifact;
 
-  ssize_t
-    i;
-
   size_t
     length;
+
+  ssize_t
+    i;
 
   assert(wand != (MagickWand *) NULL);
   assert(wand->signature == MagickWandSignature);
@@ -658,13 +659,13 @@ WandExport char **MagickGetImageArtifacts(MagickWand *wand,
         "ContainsNoImages","`%s'",wand->name);
       return((char **) NULL);
     }
-  (void) GetImageProperty(wand->images,"exif:*",wand->exception);
+  (void) GetImageArtifact(wand->images,"exif:*");
   length=1024;
   artifacts=(char **) AcquireQuantumMemory(length,sizeof(*artifacts));
   if (artifacts == (char **) NULL)
     return((char **) NULL);
-  ResetImagePropertyIterator(wand->images);
-  artifact=GetNextImageProperty(wand->images);
+  ResetImageArtifactIterator(wand->images);
+  artifact=GetNextImageArtifact(wand->images);
   for (i=0; artifact != (const char *) NULL; )
   {
     if ((*artifact != '[') &&
@@ -686,7 +687,7 @@ WandExport char **MagickGetImageArtifacts(MagickWand *wand,
         artifacts[i]=ConstantString(artifact);
         i++;
       }
-    artifact=GetNextImageProperty(wand->images);
+    artifact=GetNextImageArtifact(wand->images);
   }
   artifacts[i]=(char *) NULL;
   *number_artifacts=(size_t) i;
@@ -2376,10 +2377,8 @@ WandExport MagickBooleanType MagickSetImageProfile(MagickWand *wand,
     (void) LogMagickEvent(WandEvent,GetMagickModule(),"%s",wand->name);
   if (wand->images == (Image *) NULL)
     ThrowWandException(WandError,"ContainsNoImages",wand->name);
-  profile_info=AcquireStringInfo((size_t) length);
-  SetStringInfoDatum(profile_info,(const unsigned char *) profile);
-  status=SetImageProfile(wand->images,name,profile_info,wand->exception);
-  profile_info=DestroyStringInfo(profile_info);
+  profile_info=BlobToProfileStringInfo(name,profile,length,wand->exception);
+  status=SetImageProfilePrivate(wand->images,profile_info,wand->exception);
   return(status);
 }
 

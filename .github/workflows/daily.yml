@@ -2,6 +2,11 @@ on:
   workflow_dispatch:
   schedule:
   - cron: 0 6 * * *
+  push:
+    branches:
+    - main
+    paths:
+    - '.github/workflows/daily.yml'
   pull_request:
     branches:
     - main
@@ -12,11 +17,11 @@ name: daily
 jobs:
   change_log:
     name: 'Create ChangeLog.md'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
@@ -41,7 +46,7 @@ jobs:
     name: 'Linux Q${{matrix.quantum}}-x64 hdri=${{matrix.hdri}} (${{matrix.modules}}) (${{ matrix.compiler }})'
     container:
       image: ubuntu:20.04
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
@@ -76,7 +81,7 @@ jobs:
         apt-get install -y autoconf libfontconfig1-dev libfreetype6-dev libltdl-dev make pkg-config ${{ matrix.packages }}
 
     - name: Clone msttcorefonts
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: ImageMagick/msttcorefonts
         ref: refs/heads/main
@@ -86,7 +91,7 @@ jobs:
         set -e
         ./install.sh
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Configure ImageMagick
       env:
@@ -95,17 +100,22 @@ jobs:
         CFLAGS: ${{ matrix.compiler_flags }}
         CXXFLAGS: ${{ matrix.compiler_flags }}
       run: |
-        ./configure --with-quantum-depth=${{matrix.quantum}} --enable-hdri=${{matrix.hdri}} --${{matrix.modules}}
+        ./configure --with-perl --with-quantum-depth=${{matrix.quantum}} --enable-hdri=${{matrix.hdri}} --${{matrix.modules}}
 
     - name: Build ImageMagick
       run: |
-        make
+        make install
 
     - name: Test ImageMagick
       run: |
         make check || exit_code=$?
         if [ "$exit_code" != "0" ] ; then cat ./test-suite.log ; fi
         exit $exit_code
+
+    - name: Test PerlMagick
+      run: |
+        cd PerlMagick
+        make test TEST_VERBOSE=1
 
   build_windows:
     name: 'Windows Q${{matrix.quantum}}-${{matrix.platform}} hdri=${{matrix.hdri}} (${{matrix.buildType}})'
@@ -129,8 +139,13 @@ jobs:
             hdri: no
 
     steps:
+    - name: Clone ImageMagick
+      uses: actions/checkout@v4
+      with:
+        path: ImageMagick
+
     - name: Clone ImageMagick-Windows
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: ImageMagick/ImageMagick-Windows
         path: ImageMagick-Windows
@@ -140,7 +155,7 @@ jobs:
       shell: cmd
       run: |
         cd ImageMagick-Windows
-        CloneRepositories.cmd https://github.com/ImageMagick shallow
+        CloneRepositories.IM7.cmd
 
     - name: Download ChangeLog.md
       uses: actions/download-artifact@v4
@@ -152,23 +167,21 @@ jobs:
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
-        cd ImageMagick-Windows\VisualMagick\configure
-        msbuild configure.2022.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
+        cd ImageMagick-Windows\Configure
+        msbuild Configure.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
 
     - name: Configure ImageMagick
       shell: cmd
       run: |
-        cd ImageMagick-Windows\VisualMagick\configure
-        configure.exe /noWizard /VS2022 /includeOptional /incompatibleLicense /deprecated /${{matrix.platform}} /${{matrix.buildType}}
+        cd ImageMagick-Windows\Configure
+        Configure.exe /noWizard /VS2022 /includeOptional /incompatibleLicense /deprecated /${{matrix.platform}} /${{matrix.buildType}}
 
     - name: Build ImageMagick
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
-        cd ImageMagick-Windows\VisualMagick
-        dir /B *.sln > solution
-        set /p solution=<solution
-        msbuild %solution% /m /t:Rebuild /p:Configuration=Release,Platform=${{matrix.platform}}
+        cd ImageMagick-Windows
+        msbuild /m /t:Rebuild /p:Configuration=Release,Platform=${{matrix.platform}}
 
   build_windows_zero_configuration:
     name: 'Windows Q16-x64 hdri=yes (zero configuration ${{matrix.buildType}})'
@@ -180,8 +193,13 @@ jobs:
         buildType: [ dmt, smtd ]
 
     steps:
+    - name: Clone ImageMagick
+      uses: actions/checkout@v4
+      with:
+        path: ImageMagick
+
     - name: Clone ImageMagick-Windows
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: ImageMagick/ImageMagick-Windows
         path: ImageMagick-Windows
@@ -191,29 +209,27 @@ jobs:
       shell: cmd
       run: |
         cd ImageMagick-Windows
-        CloneRepositories.cmd https://github.com/ImageMagick shallow
+        CloneRepositories.IM7.cmd
 
     - name: Build configure
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
-        cd ImageMagick-Windows\VisualMagick\configure
-        msbuild configure.2022.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
+        cd ImageMagick-Windows\Configure
+        msbuild Configure.sln /m /t:Rebuild /p:Configuration=Release,Platform=x64
 
     - name: Configure ImageMagick
       shell: cmd
       run: |
-        cd ImageMagick-Windows\VisualMagick\configure
-        configure.exe /noWizard /VS2022 /x64 /${{matrix.buildType}} /zeroConfigurationSupport
+        cd ImageMagick-Windows\Configure
+        Configure.exe /noWizard /VS2022 /x64 /${{matrix.buildType}} /zeroConfigurationSupport
 
     - name: Build ImageMagick
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
-        cd ImageMagick-Windows\VisualMagick
-        dir /B *.sln > solution
-        set /p solution=<solution
-        msbuild %solution% /m /t:Rebuild /p:Configuration=Release,Platform=x64
+        cd ImageMagick-Windows
+        msbuild /m /t:Rebuild /p:Configuration=Release,Platform=x64
 
   build_msys2:
     name: 'Windows Q16-${{matrix.toolchain}} hdri=yes (MSYS2)'
@@ -232,9 +248,9 @@ jobs:
     - name: Prepare git
       run: git config --global core.autocrlf false
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         repository: ImageMagick/ImageMagick-Windows
         path: ImageMagick-Windows
@@ -246,7 +262,7 @@ jobs:
         update: true
 
     - name: Building ImageMagick
-      run: cd ImageMagick-Windows && makepkg-mingw --noconfirm --syncdeps
+      run: cd ImageMagick-Windows/Build/MSYS2 && makepkg-mingw --noconfirm --syncdeps
       env:
         MINGW_ARCH: ${{ matrix.msystem }}
         PKGEXT: ".pkg.tar.xz"

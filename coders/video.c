@@ -257,19 +257,21 @@ static Image *ReadVIDEOImage(const ImageInfo *image_info,
         GetDelegateCommands(delegate_info),read_info->filename,options,
         read_info->unique);
       options=DestroyString(options);
-      (void) CopyMagickString(read_info->magick,intermediate_format,
-        MagickPathExtent);
-      (void) CopyMagickString(read_info->filename,read_info->unique,
-        MagickPathExtent);
       exit_code=ExternalDelegateCommand(MagickFalse,image_info->verbose,
         command,message,exception);
+      (void) RelinquishUniqueFileResource(read_info->filename);
       if (exit_code == 0)
-        images=ReadImage(read_info,exception);
+        {
+          (void) CopyMagickString(read_info->magick,intermediate_format,
+            MagickPathExtent);
+          (void) CopyMagickString(read_info->filename,read_info->unique,
+            MagickPathExtent);
+          images=ReadImage(read_info,exception);
+        }
       else
         if (*message != '\0')
           (void) ThrowMagickException(exception,GetMagickModule(),DelegateError,
             "VideoDelegateFailed","`%s'",message);
-      (void) RelinquishUniqueFileResource(read_info->filename);
       (void) RelinquishUniqueFileResource(read_info->unique);
       if (images != (Image *) NULL)
         for (next=images; next != (Image *) NULL; next=next->next)
@@ -326,70 +328,84 @@ ModuleExport size_t RegisterVIDEOImage(void)
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsPNG;
+  entry->mime_type=ConstantString("image/apng");
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","AVI","Microsoft Audio/Visual Interleaved");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
+  entry->mime_type=ConstantString("image/avif-sequence");
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","FLV","Flash Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","MKV","Multimedia Container");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","MOV","MPEG Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","MPEG","MPEG Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","MPG","MPEG Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","MP4","VIDEO-4 Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","M2V","MPEG Video Stream");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","M4V","Raw VIDEO-4 Video");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","WEBM","Open Web Media");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   entry=AcquireMagickInfo("VIDEO","WMV","Windows Media Video");
   entry->decoder=(DecodeImageHandler *) ReadVIDEOImage;
   entry->encoder=(EncodeImageHandler *) WriteVIDEOImage;
   entry->magick=(IsImageFormatHandler *) IsVIDEO;
   entry->flags^=CoderBlobSupportFlag;
+  entry->flags|=CoderDecoderSeekableStreamFlag;
   (void) RegisterMagickInfo(entry);
   return(MagickImageCoderSignature);
 }

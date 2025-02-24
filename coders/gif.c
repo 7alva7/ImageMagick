@@ -64,6 +64,7 @@
 #include "MagickCore/option.h"
 #include "MagickCore/pixel.h"
 #include "MagickCore/pixel-accessor.h"
+#include "MagickCore/profile-private.h"
 #include "MagickCore/property.h"
 #include "MagickCore/quantize.h"
 #include "MagickCore/quantum-private.h"
@@ -448,7 +449,7 @@ static MagickBooleanType DecodeImage(Image *image,const ssize_t opacity,
       SetPixelViaPixelInfo(image,image->colormap+index,q);
       SetPixelAlpha(image,index == opacity ? TransparentAlpha : OpaqueAlpha,q);
       x++;
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncAuthenticPixels(image,exception) == MagickFalse)
       break;
@@ -665,7 +666,7 @@ static MagickBooleanType EncodeImage(const ImageInfo *image_info,Image *image,
     if (y == 0)
       {
         waiting_code=(short) GetPixelIndex(image,p);
-        p+=GetPixelChannels(image);
+        p+=(ptrdiff_t) GetPixelChannels(image);
       }
     for (x=(ssize_t) (y == 0 ? 1 : 0); x < (ssize_t) image->columns; x++)
     {
@@ -675,7 +676,7 @@ static MagickBooleanType EncodeImage(const ImageInfo *image_info,Image *image,
       next_pixel=MagickFalse;
       displacement=1;
       index=(Quantum) ((size_t) GetPixelIndex(image,p) & 0xff);
-      p+=GetPixelChannels(image);
+      p+=(ptrdiff_t) GetPixelChannels(image);
       k=(ssize_t) (((size_t) index << (MaxGIFBits-8))+(size_t) waiting_code);
       if (k >= MaxHashTable)
         k-=MaxHashTable;
@@ -1145,13 +1146,7 @@ static Image *ReadGIFImage(const ImageInfo *image_info,ExceptionInfo *exception)
                   reserved_length;
 
                 MagickBooleanType
-                  i8bim,
-                  icc,
-                  iptc,
-                  magick;
-
-                StringInfo
-                  *profile;
+                  magick = MagickFalse;
 
                 unsigned char
                   *info;
@@ -1159,16 +1154,17 @@ static Image *ReadGIFImage(const ImageInfo *image_info,ExceptionInfo *exception)
                 /*
                   Store GIF application extension as a generic profile.
                 */
-                icc=LocaleNCompare((char *) buffer,"ICCRGBG1012",11) == 0 ?
-                  MagickTrue : MagickFalse;
-                magick=LocaleNCompare((char *) buffer,"ImageMagick",11) == 0 ?
-                  MagickTrue : MagickFalse;
-                i8bim=LocaleNCompare((char *) buffer,"MGK8BIM0000",11) == 0 ?
-                  MagickTrue : MagickFalse;
-                iptc=LocaleNCompare((char *) buffer,"MGKIPTC0000",11) == 0 ?
-                  MagickTrue : MagickFalse;
-                (void) LogMagickEvent(CoderEvent,GetMagickModule(),
-                  "    Reading GIF application extension");
+                if (LocaleNCompare((char *) buffer,"ImageMagick",11) == 0)
+                  magick=MagickTrue;
+                else if (LocaleNCompare((char *) buffer,"ICCRGBG1012",11) == 0)
+                  (void) CopyMagickString(name,"icc",sizeof(name));
+                else if (LocaleNCompare((char *) buffer,"MGK8BIM0000",11) == 0)
+                  (void) CopyMagickString(name,"8bim",sizeof(name));
+                else if (LocaleNCompare((char *) buffer,"MGKIPTC0000",11) == 0)
+                  (void) CopyMagickString(name,"iptc",sizeof(name));
+                else
+                  (void) FormatLocaleString(name,sizeof(name),"gif:%.11s",
+                    buffer);
                 reserved_length=255;
                 info=(unsigned char *) AcquireQuantumMemory((size_t)
                   reserved_length,sizeof(*info));
@@ -1195,40 +1191,26 @@ static Image *ReadGIFImage(const ImageInfo *image_info,ExceptionInfo *exception)
                         }
                     }
                 }
-                profile=BlobToStringInfo(info,(size_t) info_length);
-                if (profile == (StringInfo *) NULL)
-                  {
-                    info=(unsigned char *) RelinquishMagickMemory(info);
-                    ThrowGIFException(ResourceLimitError,
-                      "MemoryAllocationFailed");
-                  }
-                if (i8bim != MagickFalse)
-                  (void) CopyMagickString(name,"8bim",sizeof(name));
-                else if (icc != MagickFalse)
-                  (void) CopyMagickString(name,"icc",sizeof(name));
-                else if (iptc != MagickFalse)
-                  (void) CopyMagickString(name,"iptc",sizeof(name));
-                else if (magick != MagickFalse)
-                  {
-                    (void) CopyMagickString(name,"magick",sizeof(name));
-                    meta_image->gamma=StringToDouble((char *) info+6,
-                      (char **) NULL);
-                  }
-                else
-                  (void) FormatLocaleString(name,sizeof(name),"gif:%.11s",
-                    buffer);
-                (void) LogMagickEvent(CoderEvent,GetMagickModule(),
-                  "      profile name=%s",name);
-                info=(unsigned char *) RelinquishMagickMemory(info);
                 if (magick != MagickFalse)
-                  profile=DestroyStringInfo(profile);
+                  meta_image->gamma=StringToDouble((char *) info+6,
+                      (char **) NULL);
                 else
                   {
-                    if (profiles == (LinkedListInfo *) NULL)
-                      profiles=NewLinkedList(0);
-                    SetStringInfoName(profile,name);
-                    (void) AppendValueToLinkedList(profiles,profile);
+                    StringInfo
+                      *profile;
+
+                    (void) LogMagickEvent(CoderEvent,GetMagickModule(),
+                      "      profile name=%s",name);
+                    profile=BlobToProfileStringInfo(name,info,(size_t) info_length,
+                      exception);
+                    if (profile != (StringInfo *) NULL)
+                      {
+                        if (profiles == (LinkedListInfo *) NULL)
+                          profiles=NewLinkedList(0);
+                        (void) AppendValueToLinkedList(profiles,profile);
+                      }
                   }
+                info=(unsigned char *) RelinquishMagickMemory(info);
               }
             break;
           }
@@ -1303,8 +1285,9 @@ static Image *ReadGIFImage(const ImageInfo *image_info,ExceptionInfo *exception)
               image->transparent_color=image->colormap[opacity];
             }
         }
-        image->background_color=image->colormap[MagickMin((ssize_t) background,
-          (ssize_t) image->colors-1)];
+        if (image->colors > 0)
+          image->background_color=image->colormap[MagickMin((ssize_t)
+            background,(ssize_t) image->colors-1)];
       }
     else
       {
@@ -1379,11 +1362,10 @@ static Image *ReadGIFImage(const ImageInfo *image_info,ExceptionInfo *exception)
         profile=(StringInfo *) GetNextValueInLinkedList(profiles);
         while (profile != (StringInfo *) NULL)
         {
-          (void) SetImageProfile(image,GetStringInfoName(profile),profile,
-            exception);
+          (void) SetImageProfilePrivate(image,profile,exception);
           profile=(StringInfo *) GetNextValueInLinkedList(profiles);
         }
-        profiles=DestroyLinkedList(profiles,DestroyGIFProfile);
+        profiles=DestroyLinkedList(profiles,(void *(*)(void *)) NULL);
       }
     duration+=image->delay*image->iterations;
     if (image_info->number_scenes != 0)

@@ -58,7 +58,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data,size_t Size)
 
   ssize_t
     offset;
-  
+
   std::string
     encoder=FUZZ_ENCODER;
 
@@ -74,14 +74,24 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data,size_t Size)
     const Magick::Blob
       blob(Data+offset,Size-offset);
 
+#if defined(BUILD_MAIN)
+    std::string
+      image_data;
+
+    image_data=blob.base64();
+#endif
+
     image.read(blob);
   }
   catch (Magick::Exception &e)
   {
+#if defined(BUILD_MAIN)
+    std::cout << "Exception when reading: " << e.what() << std::endl;
+#endif
     return(0);
   }
 
-#if FUZZ_IMAGEMAGICK_ENCODER_WRITE || BUILD_MAIN
+#if FUZZ_IMAGEMAGICK_ENCODER_WRITE || defined(BUILD_MAIN)
   try
   {
     Magick::Blob
@@ -91,6 +101,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data,size_t Size)
   }
   catch (Magick::Exception &e)
   {
+#if defined(BUILD_MAIN)
+    std::cout << "Exception when writing: " << e.what() << std::endl;
+#endif
   }
 #endif
   return(0);

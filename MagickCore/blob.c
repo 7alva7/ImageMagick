@@ -93,6 +93,25 @@
 #include <io.h>
 #define _O_BINARY O_BINARY
 #endif
+#if defined(MAGICKCORE_WINDOWS_SUPPORT)
+#  if !defined(fsync)
+#    define fsync  _commit
+#  endif
+#  if !defined(mmap)
+#    define MAGICKCORE_HAVE_MMAP 1
+#    define mmap(address,length,protection,access,file,offset) \
+  NTMapMemory(address,length,protection,access,file,offset)
+#  endif
+#  if !defined(munmap)
+#    define munmap(address,length)  NTUnmapMemory(address,length)
+#  endif
+#  if !defined(pclose)
+#    define pclose  _pclose
+#  endif
+#  if !defined(popen)
+#    define popen  _popen
+#  endif
+#endif
 
 /*
   Typedef declarations.
@@ -375,7 +394,7 @@ MagickExport MagickBooleanType BlobToFile(char *filename,const void *blob,
   for (i=0; i < length; i+=(size_t) count)
   {
     count=write(file,(const char *) blob+i,MagickMin(length-i,(size_t)
-      MAGICK_SSIZE_MAX));
+      MagickMaxBufferExtent));
     if (count <= 0)
       {
         count=0;
@@ -618,8 +637,7 @@ MagickExport MagickBooleanType CloseBlob(Image *image)
   blob_info=image->blob;
   if ((blob_info == (BlobInfo *) NULL) || (blob_info->type == UndefinedStream))
     return(MagickTrue);
-  if (SyncBlob(image) != 0)
-    ThrowBlobException(blob_info);
+  (void) SyncBlob(image);
   status=blob_info->status;
   switch (blob_info->type)
   {
@@ -1048,6 +1066,10 @@ MagickExport void *DetachBlob(BlobInfo *blob_info)
     }
   blob_info->mapped=MagickFalse;
   blob_info->length=0;
+  /*
+    We should not reset blob_info->extent because we use it to check if the
+    blob was opened inside ImagesToBlob and ImagesToBlob.
+  */
   blob_info->offset=0;
   blob_info->mode=UndefinedBlobMode;
   blob_info->eof=MagickFalse;
@@ -1536,7 +1558,7 @@ MagickExport void *FileToBlob(const char *filename,const size_t extent,
       for (i=0; i < *length; i+=(size_t) count)
       {
         count=read(file,blob+i,(size_t) MagickMin(*length-i,(size_t)
-          MAGICK_SSIZE_MAX));
+          MagickMaxBufferExtent));
         if (count <= 0)
           {
             count=0;
@@ -2083,6 +2105,7 @@ MagickExport void *ImageToBlob(const ImageInfo *image_info,
         {
           (void) CloseBlob(image);
           image->blob->exempt=MagickTrue;
+          image->blob->extent=0;
           *image->filename='\0';
           status=WriteImage(blob_info,image,exception);
           *length=image->blob->length;
@@ -2094,7 +2117,7 @@ MagickExport void *ImageToBlob(const ImageInfo *image_info,
               else
                 blob=ResizeQuantumMemory(blob,*length+1,sizeof(unsigned char));
             }
-          else if (status == MagickFalse)
+          else if ((status == MagickFalse) && (image->blob->extent == 0))
             blob_info->blob=RelinquishMagickMemory(blob_info->blob);
         }
     }
@@ -2490,6 +2513,7 @@ MagickExport void *ImagesToBlob(const ImageInfo *image_info,Image *images,
         {
           (void) CloseBlob(images);
           images->blob->exempt=MagickTrue;
+          images->blob->extent=0;
           *images->filename='\0';
           status=WriteImages(blob_info,images,images->filename,exception);
           *length=images->blob->length;
@@ -2501,7 +2525,7 @@ MagickExport void *ImagesToBlob(const ImageInfo *image_info,Image *images,
               else
                 blob=ResizeQuantumMemory(blob,*length+1,sizeof(unsigned char));
             }
-          else if (status == MagickFalse)
+          else if ((status == MagickFalse) && (images->blob->extent == 0))
             blob_info->blob=RelinquishMagickMemory(blob_info->blob);
         }
     }
@@ -5113,8 +5137,6 @@ MagickExport MagickOffsetType SeekBlob(Image *image,
           blob_info->eof=MagickFalse;
           break;
         }
-      if (blob_info->offset >= (MagickOffsetType) ((off_t) blob_info->extent))
-        return(-1);
       break;
     }
     case CustomStream:
@@ -5518,6 +5540,8 @@ static int SyncBlob(const Image *image)
   assert(image->blob != (BlobInfo *) NULL);
   if (IsEventLogging() != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
+  if (EOFBlob(image) != 0)
+    return(0);
   blob_info=image->blob;
   status=0;
   switch (blob_info->type)

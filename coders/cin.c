@@ -20,7 +20,7 @@
 %                               October 2003                                  %
 %                                                                             %
 %                                                                             %
-%  Copyright @ 2003 ImageMagick Studio LLC, a non-profit organization         %
+%  Copyright @ 1999 ImageMagick Studio LLC, a non-profit organization         %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -63,7 +63,7 @@
 #include "MagickCore/monitor.h"
 #include "MagickCore/monitor-private.h"
 #include "MagickCore/option.h"
-#include "MagickCore/profile.h"
+#include "MagickCore/profile-private.h"
 #include "MagickCore/property.h"
 #include "MagickCore/quantum-private.h"
 #include "MagickCore/quantum-private.h"
@@ -711,14 +711,16 @@ static Image *ReadCINImage(const ImageInfo *image_info,ExceptionInfo *exception)
       */
       if (cin.file.user_length > GetBlobSize(image))
         ThrowReaderException(CorruptImageError,"InsufficientImageDataInFile");
-      profile=BlobToStringInfo((const unsigned char *) NULL,
-        cin.file.user_length);
+      profile=AcquireProfileStringInfo("dpx:user.data",cin.file.user_length,
+        exception);
       if (profile == (StringInfo *) NULL)
-        ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
-      offset+=ReadBlob(image,GetStringInfoLength(profile),
-        GetStringInfoDatum(profile));
-      (void) SetImageProfile(image,"dpx:user.data",profile,exception);
-      profile=DestroyStringInfo(profile);
+        offset=SeekBlob(image,(MagickOffsetType) cin.file.user_length,SEEK_CUR);
+      else
+        {
+          offset+=ReadBlob(image,cin.file.user_length,
+            GetStringInfoDatum(profile));
+          (void) SetImageProfilePrivate(image,profile,exception);
+        }
     }
   image->depth=cin.image.channel[0].bits_per_pixel;
   image->columns=cin.image.channel[0].pixels_per_line;
@@ -998,7 +1000,7 @@ static MagickBooleanType WriteCINImage(const ImageInfo *image_info,Image *image,
   offset+=WriteBlob(image,sizeof(cin.file.filename),(unsigned char *)
     cin.file.filename);
   seconds=GetMagickTime();
-  GetMagickUTCtime(&seconds,&utc_time);
+  GetMagickUTCTime(&seconds,&utc_time);
   (void) memset(timestamp,0,sizeof(timestamp));
   (void) strftime(timestamp,MagickPathExtent,"%Y:%m:%d:%H:%M:%SUTC",&utc_time);
   (void) memset(cin.file.create_date,0,sizeof(cin.file.create_date));

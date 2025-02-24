@@ -2192,7 +2192,7 @@ void Magick::Image::channel(const ChannelType channel_)
     *newImage;
 
   GetPPException;
-  newImage=SeparateImage(image(),channel_,exceptionInfo);
+  newImage=SeparateImage(constImage(),channel_,exceptionInfo);
   replaceImage(newImage);
   ThrowImageException;
 }
@@ -3569,9 +3569,14 @@ void Magick::Image::magnify(void)
 
 void Magick::Image::map(const Image &mapImage_,const bool dither_)
 {
+  map(mapImage_, dither_ ? RiemersmaDitherMethod : NoDitherMethod);
+}
+
+void Magick::Image::map(const Image &mapImage_,const DitherMethod ditherMethod_)
+{
   modifyImage();
   GetPPException;
-  options()->quantizeDither(dither_);
+  options()->quantizeDither(ditherMethod_);
   RemapImage(options()->quantizeInfo(),image(),mapImage_.constImage(),
     exceptionInfo);
   ThrowImageException;

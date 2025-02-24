@@ -153,7 +153,6 @@ MagickExport MagickBooleanType FloodfillPaintImage(Image *image,
     *segment_info;
 
   PixelInfo
-    fill_color,
     pixel;
 
   SegmentInfo
@@ -246,8 +245,8 @@ MagickExport MagickBooleanType FloodfillPaintImage(Image *image,
       exception);
     if ((p == (const Quantum *) NULL) || (q == (Quantum *) NULL))
       break;
-    p+=x1*(ssize_t) GetPixelChannels(image);
-    q+=x1*(ssize_t) GetPixelChannels(floodplane_image);
+    p+=(ptrdiff_t) x1*(ssize_t) GetPixelChannels(image);
+    q+=(ptrdiff_t) x1*(ssize_t) GetPixelChannels(floodplane_image);
     for (x=x1; x >= 0; x--)
     {
       if (GetPixelGray(floodplane_image,q) != 0)
@@ -256,7 +255,7 @@ MagickExport MagickBooleanType FloodfillPaintImage(Image *image,
       if (IsFuzzyEquivalencePixelInfo(&pixel,target) == invert)
         break;
       SetPixelGray(floodplane_image,QuantumRange,q);
-      p-=GetPixelChannels(image);
+      p-=(ptrdiff_t)GetPixelChannels(image);
       q-=GetPixelChannels(floodplane_image);
     }
     if (SyncCacheViewAuthenticPixels(floodplane_view,exception) == MagickFalse)
@@ -289,8 +288,8 @@ MagickExport MagickBooleanType FloodfillPaintImage(Image *image,
                 if (IsFuzzyEquivalencePixelInfo(&pixel,target) == invert)
                   break;
                 SetPixelGray(floodplane_image,QuantumRange,q);
-                p+=GetPixelChannels(image);
-                q+=GetPixelChannels(floodplane_image);
+                p+=(ptrdiff_t) GetPixelChannels(image);
+                q+=(ptrdiff_t) GetPixelChannels(floodplane_image);
               }
               status=SyncCacheViewAuthenticPixels(floodplane_view,exception);
               if (status == MagickFalse)
@@ -317,14 +316,18 @@ MagickExport MagickBooleanType FloodfillPaintImage(Image *image,
             GetPixelInfoPixel(image,p,&pixel);
             if (IsFuzzyEquivalencePixelInfo(&pixel,target) != invert)
               break;
-            p+=GetPixelChannels(image);
-            q+=GetPixelChannels(floodplane_image);
+            p+=(ptrdiff_t) GetPixelChannels(image);
+            q+=(ptrdiff_t) GetPixelChannels(floodplane_image);
           }
         }
       start=x;
     } while (x <= x2);
   }
   status=MagickTrue;
+#if defined(MAGICKCORE_OPENMP_SUPPORT)
+  #pragma omp parallel for schedule(static) shared(status) \
+    magick_number_threads(floodplane_image,image,image->rows,2)
+#endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
     const Quantum
@@ -352,6 +355,9 @@ MagickExport MagickBooleanType FloodfillPaintImage(Image *image,
     {
       if (GetPixelGray(floodplane_image,p) != 0)
         {
+          PixelInfo
+            fill_color;
+
           GetFillColor(draw_info,x,y,&fill_color,exception);
           if ((image->channel_mask & RedChannel) != 0)
             SetPixelRed(image,(Quantum) fill_color.red,q);
@@ -365,8 +371,8 @@ MagickExport MagickBooleanType FloodfillPaintImage(Image *image,
               ((image->alpha_trait & BlendPixelTrait) != 0))
             SetPixelAlpha(image,(Quantum) fill_color.alpha,q);
         }
-      p+=GetPixelChannels(floodplane_image);
-      q+=GetPixelChannels(image);
+      p+=(ptrdiff_t) GetPixelChannels(floodplane_image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -514,7 +520,7 @@ MagickExport MagickBooleanType GradientImage(Image *image,
           gradient->gradient_vector.x1=0.0;
           gradient->gradient_vector.y1=0.0;
           gradient->gradient_vector.x2=0.0;
-          gradient->gradient_vector.y2=(double) image->columns-1;
+          gradient->gradient_vector.y2=(double) image->rows-1;
           break;
         }
         case SouthEastGravity:
@@ -850,8 +856,8 @@ MagickExport Image *OilPaintImage(const Image *image,const double radius,
         SetPixelChannel(paint_image,channel,p[j*(ssize_t)
           GetPixelChannels(linear_image)+i],q);
       }
-      p+=GetPixelChannels(linear_image);
-      q+=GetPixelChannels(paint_image);
+      p+=(ptrdiff_t) GetPixelChannels(linear_image);
+      q+=(ptrdiff_t) GetPixelChannels(paint_image);
     }
     if (SyncCacheViewAuthenticPixels(paint_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -1006,7 +1012,7 @@ MagickExport MagickBooleanType OpaquePaintImage(Image *image,
           if ((traits & UpdatePixelTrait) != 0)
             SetPixelAlpha(image,(Quantum) conform_fill.alpha,q);
         }
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -1134,7 +1140,7 @@ MagickExport MagickBooleanType TransparentPaintImage(Image *image,
       GetPixelInfoPixel(image,q,&pixel);
       if (IsFuzzyEquivalencePixelInfo(&pixel,target) != invert)
         SetPixelAlpha(image,opacity,q);
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -1269,7 +1275,7 @@ MagickExport MagickBooleanType TransparentPaintImageChroma(Image *image,
         MagickFalse;
       if (match != invert)
         SetPixelAlpha(image,opacity,q);
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
       status=MagickFalse;

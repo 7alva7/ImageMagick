@@ -655,7 +655,7 @@ MagickExport ssize_t FormatMagickCaption(Image *image,DrawInfo *draw_info,
   q=draw_info->text;
   s=(char *) NULL;
   width=0;
-  for (p=(*caption); GetUTFCode(p) != 0; p+=GetUTFOctets(p))
+  for (p=(*caption); GetUTFCode(p) != 0; p+=(ptrdiff_t) GetUTFOctets(p))
   {
     int
       code;
@@ -710,7 +710,7 @@ MagickExport ssize_t FormatMagickCaption(Image *image,DrawInfo *draw_info,
     s=(char *) NULL;
   }
   n=0;
-  for (p=(*caption); GetUTFCode(p) != 0; p+=GetUTFOctets(p))
+  for (p=(*caption); GetUTFCode(p) != 0; p+=(ptrdiff_t) GetUTFOctets(p))
     if (GetUTFCode(p) == '\n')
       n++;
   return(n);
@@ -1084,9 +1084,13 @@ static MagickBooleanType RenderType(Image *image,const DrawInfo *draw_info,
       ExceptionInfo
         *sans_exception;
 
+      /*
+        Search for a default font.
+      */
       sans_exception=AcquireExceptionInfo();
-      type_info=GetTypeInfoByFamily((const char *) NULL,draw_info->style,
-        draw_info->stretch,draw_info->weight,sans_exception);
+      if (type_info == (const TypeInfo *) NULL)
+        type_info=GetTypeInfoByFamily((const char *) NULL,draw_info->style,
+          draw_info->stretch,draw_info->weight,sans_exception);
       if (type_info == (const TypeInfo *) NULL)
         type_info=GetTypeInfo("*",sans_exception);
       sans_exception=DestroyExceptionInfo(sans_exception);
@@ -1255,7 +1259,7 @@ static size_t ComplexTextLayout(const DrawInfo *draw_info,const char *text,
     return(0);
   last_glyph=0;
   p=text;
-  for (i=0; GetUTFCode(p) != 0; p+=GetUTFOctets(p), i++)
+  for (i=0; GetUTFCode(p) != 0; p+=(ptrdiff_t) GetUTFOctets(p), i++)
   {
     (*grapheme)[i].index=(ssize_t) FT_Get_Char_Index(face,(FT_ULong)
       GetUTFCode(p));
@@ -1833,7 +1837,7 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
       if ((image->alpha_trait & BlendPixelTrait) == 0)
         (void) SetImageAlphaChannel(image,OpaqueAlphaChannel,exception);
     }
-  for (p=draw_info->text; GetUTFCode(p) != 0; p+=GetUTFOctets(p))
+  for (p=draw_info->text; GetUTFCode(p) != 0; p+=(ptrdiff_t) GetUTFOctets(p))
     if (GetUTFCode(p) < 0)
       break;
   utf8=(unsigned char *) NULL;
@@ -1940,8 +1944,12 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
           (draw_info->stroke.alpha == (MagickRealType) TransparentAlpha) &&
           (draw_info->stroke_pattern == (Image *) NULL)) ? MagickTrue :
           MagickFalse;
-        image_view=AcquireAuthenticCacheView(image,exception);
         r=bitmap->bitmap.buffer;
+        image_view=AcquireAuthenticCacheView(image,exception);
+#if defined(MAGICKCORE_OPENMP_SUPPORT)
+        #pragma omp parallel for schedule(static) shared(status) \
+          magick_number_threads(image,image,bitmap->bitmap.rows,4)
+#endif
         for (y=0; y < (ssize_t) bitmap->bitmap.rows; y++)
         {
           double
@@ -1987,7 +1995,7 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
             if ((x_offset < 0) || (x_offset >= (ssize_t) image->columns))
               {
                 if (q != (Quantum *) NULL)
-                  q+=GetPixelChannels(image);
+                  q+=(ptrdiff_t) GetPixelChannels(image);
                 continue;
               }
             fill_opacity=1.0;
@@ -2033,7 +2041,7 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
                 if (sync == MagickFalse)
                   status=MagickFalse;
               }
-            q+=GetPixelChannels(image);
+            q+=(ptrdiff_t) GetPixelChannels(image);
           }
           sync=SyncCacheViewAuthenticPixels(image_view,exception);
           if (sync == MagickFalse)
@@ -2105,6 +2113,7 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
   const char *magick_unused(encoding),const PointInfo *offset,
   TypeMetric *metrics,ExceptionInfo *exception)
 {
+  magick_unreferenced(encoding);
   (void) ThrowMagickException(exception,GetMagickModule(),
     MissingDelegateWarning,"DelegateLibrarySupportNotBuiltIn","'%s' (Freetype)",
     draw_info->font != (char *) NULL ? draw_info->font : "none");
@@ -2211,7 +2220,8 @@ static MagickBooleanType RenderPostscript(Image *image,
     unique_file;
 
   MagickBooleanType
-    identity;
+    identity,
+    status;
 
   PointInfo
     extent,
@@ -2385,7 +2395,12 @@ static MagickBooleanType RenderPostscript(Image *image,
         (void) SetImageAlphaChannel(annotate_image,OpaqueAlphaChannel,
           exception);
       fill_color=draw_info->fill;
+      status=MagickTrue;
       annotate_view=AcquireAuthenticCacheView(annotate_image,exception);
+#if defined(MAGICKCORE_OPENMP_SUPPORT)
+      #pragma omp parallel for schedule(static) shared(status) \
+        magick_number_threads(annotate_image,annotate_image,annotate_image->rows,4)
+#endif
       for (y=0; y < (ssize_t) annotate_image->rows; y++)
       {
         ssize_t
@@ -2394,10 +2409,15 @@ static MagickBooleanType RenderPostscript(Image *image,
         Quantum
           *magick_restrict q;
 
+        if (status == MagickFalse)
+          continue;
         q=GetCacheViewAuthenticPixels(annotate_view,0,y,annotate_image->columns,
           1,exception);
         if (q == (Quantum *) NULL)
-          break;
+          {
+            status=MagickFalse;
+            continue;
+          }
         for (x=0; x < (ssize_t) annotate_image->columns; x++)
         {
           GetFillColor(draw_info,x,y,&fill_color,exception);
@@ -2406,11 +2426,11 @@ static MagickBooleanType RenderPostscript(Image *image,
           SetPixelRed(annotate_image,fill_color.red,q);
           SetPixelGreen(annotate_image,fill_color.green,q);
           SetPixelBlue(annotate_image,fill_color.blue,q);
-          q+=GetPixelChannels(annotate_image);
+          q+=(ptrdiff_t) GetPixelChannels(annotate_image);
         }
         sync=SyncCacheViewAuthenticPixels(annotate_view,exception);
         if (sync == MagickFalse)
-          break;
+          status=MagickFalse;
       }
       annotate_view=DestroyCacheView(annotate_view);
       (void) CompositeImage(image,annotate_image,OverCompositeOp,MagickTrue,

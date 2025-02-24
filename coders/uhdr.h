@@ -1,5 +1,5 @@
 /*
-  Copyright @ 2018 ImageMagick Studio LLC, a non-profit organization
+  Copyright @ 1999 ImageMagick Studio LLC, a non-profit organization
   dedicated to making software imaging solutions freely available.
 
   You may not use this file except in compliance with the License.  You may
@@ -14,30 +14,18 @@
   limitations under the License.
 */
 
-#include <cstdint>
+#include "coders/coders-private.h"
 
-#include <Magick++/Blob.h>
-#include <Magick++/Image.h>
+#define MagickUHDRHeaders
 
-#include "utils.cc"
+#define MagickUHDRAliases
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
-{
-  if (IsInvalidSize(Size,1,0))
-    return(0);
-  try
-  {
-    const Magick::Blob
-      blob(Data,Size);
+#if defined(__cplusplus) || defined(c_plusplus)
+extern "C" {
+#endif
 
-    Magick::Image
-      image;
+MagickCoderExports(UHDR)
 
-    image.read(blob);
-    image.enhance();
-  }
-  catch (Magick::Exception &e)
-  {
-  }
-  return(0);
+#if defined(__cplusplus) || defined(c_plusplus)
 }
+#endif

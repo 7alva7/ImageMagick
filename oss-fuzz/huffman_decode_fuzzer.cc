@@ -14,39 +14,30 @@
   limitations under the License.
 */
 
-#include <string.h>
-#include <iostream>
-using namespace std;
+#include <cstdint>
 
-extern class EncoderFormat
+#include <Magick++/Image.h>
+
+#include "utils.cc"
+
+namespace MagickCore
 {
-public:
-  const string get()
-  {
-    return(string(_format.begin(),_format.end()));
-  }
+  extern "C" void AttachBlob(BlobInfo *,const void *,const size_t);
+}
 
-  void set(const wstring fileName)
-  {
-    wstring
-      format;
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data,size_t Size)
+{
+  Magick::ExceptionInfo
+    *exceptionInfo;
 
-    size_t
-      index;
+  Magick::Image
+    image;
 
-    if (fileName.find(L"clusterfuzz-testcase-") == -1)
-      return;
-
-    format=fileName;
-    index=format.find(L"_", 0);
-    if (index == wstring::npos)
-      return;
-
-    format=format.substr(index+1);
-    index=format.find(L"_",0);
-    if (index != wstring::npos)
-      _format=format.substr(0, index);
-  }
-private:
-  wstring _format=L".notset";
-};
+  if (IsInvalidSize(Size))
+    return(0);
+  MagickCore::AttachBlob(image.image()->blob,(const void *) Data,Size);
+  exceptionInfo=MagickCore::AcquireExceptionInfo();
+  (void) HuffmanDecodeImage(image.image(),exceptionInfo);
+  (void) MagickCore::DestroyExceptionInfo(exceptionInfo);
+  return(0);
+}

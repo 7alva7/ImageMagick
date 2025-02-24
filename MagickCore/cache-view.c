@@ -23,7 +23,7 @@
 %                               February 2000                                 %
 %                                                                             %
 %                                                                             %
-%  Copyright @ 2000 ImageMagick Studio LLC, a non-profit organization         %
+%  Copyright @ 1999 ImageMagick Studio LLC, a non-profit organization         %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -176,8 +176,6 @@ MagickExport CacheView *AcquireVirtualCacheView(const Image *image,
   cache_view->debug=(GetLogEventMask() & CacheEvent) != 0 ? MagickTrue :
     MagickFalse;
   cache_view->signature=MagickCoreSignature;
-  if (cache_view->nexus_info == (NexusInfo **) NULL)
-    ThrowFatalException(CacheFatalError,"UnableToAcquireCacheView");
   return(cache_view);
 }
 

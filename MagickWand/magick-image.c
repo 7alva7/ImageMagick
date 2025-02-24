@@ -23,7 +23,7 @@
 %                                 August 2003                                 %
 %                                                                             %
 %                                                                             %
-%  Copyright @ 2003 ImageMagick Studio LLC, a non-profit organization         %
+%  Copyright @ 1999 ImageMagick Studio LLC, a non-profit organization         %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -152,7 +152,7 @@ WandExport Image *GetImageFromMagickWand(const MagickWand *wand)
 %                                                                             %
 %                                                                             %
 %                                                                             %
-%   M a g i c k A d a p t i v e S h a r p e n I m a g e                       %
+%   M a g i c k A d a p t i v e B l u r I m a g e                             %
 %                                                                             %
 %                                                                             %
 %                                                                             %
@@ -401,10 +401,12 @@ static inline MagickBooleanType InsertImageInWand(MagickWand *wand,
         wand->images=GetLastImageInList(images);
       return(MagickTrue);
     }
-  /* user jumped to first image, so prepend new images - remain active */
   if ((wand->insert_before != MagickFalse) &&
-       (wand->images->previous == (Image *) NULL))
+      (wand->images->previous == (Image *) NULL))
     {
+      /*
+        User jumped to first image, so prepend new images - remain active.
+      */
       PrependImageToList(&wand->images,images);
       wand->images=GetFirstImageInList(images);
       return(MagickTrue);
@@ -412,7 +414,7 @@ static inline MagickBooleanType InsertImageInWand(MagickWand *wand,
   /*
     Note you should never have 'insert_before' true when current image is not
     the first image in the wand!  That is no insert before current image, only
-    after current image
+    after current image.
   */
   if (wand->images->next == (Image *) NULL)
     {
@@ -928,8 +930,8 @@ WandExport MagickBooleanType MagickBilateralBlurImage(MagickWand *wand,
     (void) LogMagickEvent(WandEvent,GetMagickModule(),"%s",wand->name);
   if (wand->images == (Image *) NULL)
     ThrowWandException(WandError,"ContainsNoImages",wand->name);
-  blur_image=BilateralBlurImage(wand->images,radius,sigma,intensity_sigma,
-    spatial_sigma,wand->exception);
+  blur_image=BilateralBlurImage(wand->images,(size_t) radius,(size_t) sigma,
+    intensity_sigma,spatial_sigma,wand->exception);
   if (blur_image == (Image *) NULL)
     return(MagickFalse);
   ReplaceImageInList(&wand->images,blur_image);

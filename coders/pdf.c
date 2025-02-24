@@ -115,7 +115,7 @@ typedef struct _PDFInfo
     bounds;
 
   StringInfo
-    *profile;
+    *xmp_profile;
 } PDFInfo;
 
 /*
@@ -264,7 +264,7 @@ static void ReadPDFInfo(const ImageInfo *image_info,Image *image,
         {
           case '<':
           {
-            ReadGhostScriptXMPProfile(&buffer,&pdf_info->profile);
+            ReadGhostScriptXMPProfile(&buffer,&pdf_info->xmp_profile,exception);
             continue;
           }
           case '/':
@@ -378,8 +378,8 @@ static void ReadPDFInfo(const ImageInfo *image_info,Image *image,
 
 static inline void CleanupPDFInfo(PDFInfo *pdf_info)
 {
-  if (pdf_info->profile != (StringInfo *) NULL)
-    pdf_info->profile=DestroyStringInfo(pdf_info->profile);
+  if (pdf_info->xmp_profile != (StringInfo *) NULL)
+    pdf_info->xmp_profile=DestroyStringInfo(pdf_info->xmp_profile);
 }
 
 static Image *ReadPDFImage(const ImageInfo *image_info,ExceptionInfo *exception)
@@ -727,17 +727,17 @@ static Image *ReadPDFImage(const ImageInfo *image_info,ExceptionInfo *exception)
           pdf_image=cmyk_image;
         }
     }
-  if (pdf_info.profile != (StringInfo *) NULL)
+  if (pdf_info.xmp_profile != (StringInfo *) NULL)
     {
       char
         *profile;
 
-      (void) SetImageProfile(image,"xmp",pdf_info.profile,exception);
-      profile=(char *) GetStringInfoDatum(pdf_info.profile);
+      profile=(char *) GetStringInfoDatum(pdf_info.xmp_profile);
       if (strstr(profile,"Adobe Illustrator") != (char *) NULL)
         (void) CopyMagickString(image->magick,"AI",MagickPathExtent);
+      (void) SetImageProfilePrivate(image,pdf_info.xmp_profile,exception);
+      pdf_info.xmp_profile=(StringInfo *) NULL;
     }
-  CleanupPDFInfo(&pdf_info);
   if (image_info->number_scenes != 0)
     {
       Image
@@ -1354,7 +1354,7 @@ static void WritePDFValue(Image* image,const char *keyword,
       (void) WriteBlobString(image,"/");
       (void) WriteBlobString(image,keyword);
       (void) WriteBlobString(image," <FEFF");
-      for (i=0; i < (ssize_t) length; i++)
+      for (i=0; i < (ssize_t) length - 1; i++)
       {
         (void) WriteBlobByte(image,hex_digits[(utf16[i] >> 12) & 0x0f]);
         (void) WriteBlobByte(image,hex_digits[(utf16[i] >> 8) & 0x0f]);
@@ -2190,7 +2190,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
               for (x=0; x < (ssize_t) image->columns; x++)
               {
                 *q++=ScaleQuantumToChar(ClampToQuantum(GetPixelLuma(image,p)));
-                p+=GetPixelChannels(image);
+                p+=(ptrdiff_t) GetPixelChannels(image);
               }
               if (image->previous == (Image *) NULL)
                 {
@@ -2233,7 +2233,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
               {
                 Ascii85Encode(image,ScaleQuantumToChar(ClampToQuantum(
                   GetPixelLuma(image,p))));
-                p+=GetPixelChannels(image);
+                p+=(ptrdiff_t) GetPixelChannels(image);
               }
               if (image->previous == (Image *) NULL)
                 {
@@ -2307,7 +2307,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
                 *q++=ScaleQuantumToChar(GetPixelBlue(image,p));
                 if (image->colorspace == CMYKColorspace)
                   *q++=ScaleQuantumToChar(GetPixelBlack(image,p));
-                p+=GetPixelChannels(image);
+                p+=(ptrdiff_t) GetPixelChannels(image);
               }
               if (image->previous == (Image *) NULL)
                 {
@@ -2354,7 +2354,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
                 if (image->colorspace == CMYKColorspace)
                   Ascii85Encode(image,ScaleQuantumToChar(
                     GetPixelBlack(image,p)));
-                p+=GetPixelChannels(image);
+                p+=(ptrdiff_t) GetPixelChannels(image);
               }
               if (image->previous == (Image *) NULL)
                 {
@@ -2401,7 +2401,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
                 for (x=0; x < (ssize_t) image->columns; x++)
                 {
                   *q++=(unsigned char) ((ssize_t) GetPixelIndex(image,p));
-                  p+=GetPixelChannels(image);
+                  p+=(ptrdiff_t) GetPixelChannels(image);
                 }
                 if (image->previous == (Image *) NULL)
                   {
@@ -2444,7 +2444,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
                 {
                   Ascii85Encode(image,(unsigned char) ((ssize_t)
                     GetPixelIndex(image,p)));
-                  p+=GetPixelChannels(image);
+                  p+=(ptrdiff_t) GetPixelChannels(image);
                 }
                 if (image->previous == (Image *) NULL)
                   {
@@ -2730,7 +2730,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
               {
                 *q++=ScaleQuantumToChar(ClampToQuantum(GetPixelLuma(tile_image,
                   p)));
-                p+=GetPixelChannels(tile_image);
+                p+=(ptrdiff_t) GetPixelChannels(tile_image);
               }
             }
 #if defined(MAGICKCORE_ZLIB_DELEGATE)
@@ -2768,7 +2768,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
               {
                 Ascii85Encode(image,ScaleQuantumToChar(ClampToQuantum(
                   GetPixelLuma(tile_image,p))));
-                p+=GetPixelChannels(tile_image);
+                p+=(ptrdiff_t) GetPixelChannels(tile_image);
               }
             }
             Ascii85Flush(image);
@@ -2842,7 +2842,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
                 *q++=ScaleQuantumToChar(GetPixelBlue(tile_image,p));
                 if (tile_image->colorspace == CMYKColorspace)
                   *q++=ScaleQuantumToChar(GetPixelBlack(tile_image,p));
-                p+=GetPixelChannels(tile_image);
+                p+=(ptrdiff_t) GetPixelChannels(tile_image);
               }
             }
 #if defined(MAGICKCORE_ZLIB_DELEGATE)
@@ -2887,7 +2887,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
                 if (image->colorspace == CMYKColorspace)
                   Ascii85Encode(image,ScaleQuantumToChar(
                     GetPixelBlack(tile_image,p)));
-                p+=GetPixelChannels(tile_image);
+                p+=(ptrdiff_t) GetPixelChannels(tile_image);
               }
             }
             Ascii85Flush(image);
@@ -2932,7 +2932,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
                 for (x=0; x < (ssize_t) tile_image->columns; x++)
                 {
                   *q++=(unsigned char) ((ssize_t) GetPixelIndex(tile_image,p));
-                  p+=GetPixelChannels(tile_image);
+                  p+=(ptrdiff_t) GetPixelChannels(tile_image);
                 }
               }
 #if defined(MAGICKCORE_ZLIB_DELEGATE)
@@ -2970,7 +2970,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
                 {
                   Ascii85Encode(image,(unsigned char) ((ssize_t)
                     GetPixelIndex(tile_image,p)));
-                  p+=GetPixelChannels(image);
+                  p+=(ptrdiff_t) GetPixelChannels(image);
                 }
               }
               Ascii85Flush(image);
@@ -3146,7 +3146,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
               for (x=0; x < (ssize_t) image->columns; x++)
               {
                 *q++=ScaleQuantumToChar(GetPixelAlpha(image,p));
-                p+=GetPixelChannels(image);
+                p+=(ptrdiff_t) GetPixelChannels(image);
               }
             }
 #if defined(MAGICKCORE_ZLIB_DELEGATE)
@@ -3181,7 +3181,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
               for (x=0; x < (ssize_t) image->columns; x++)
               {
                 Ascii85Encode(image,ScaleQuantumToChar(GetPixelAlpha(image,p)));
-                p+=GetPixelChannels(image);
+                p+=(ptrdiff_t) GetPixelChannels(image);
               }
             }
             Ascii85Flush(image);
@@ -3226,7 +3226,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
   WritePDFValue(image,"Subject",GetPDFSubject(image_info),is_pdfa);
   WritePDFValue(image,"Keywords",GetPDFKeywords(image_info),is_pdfa);
   seconds=GetPdfCreationDate(image_info,image);
-  GetMagickUTCtime(&seconds,&utc_time);
+  GetMagickUTCTime(&seconds,&utc_time);
   (void) FormatLocaleString(temp,MagickPathExtent,"D:%04d%02d%02d%02d%02d%02d",
     utc_time.tm_year+1900,utc_time.tm_mon+1,utc_time.tm_mday,
     utc_time.tm_hour,utc_time.tm_min,utc_time.tm_sec);
@@ -3234,7 +3234,7 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
     temp);
   (void) WriteBlobString(image,buffer);
   seconds=GetPdfModDate(image_info,image);
-  GetMagickUTCtime(&seconds,&utc_time);
+  GetMagickUTCTime(&seconds,&utc_time);
   (void) FormatLocaleString(temp,MagickPathExtent,"D:%04d%02d%02d%02d%02d%02d",
     utc_time.tm_year+1900,utc_time.tm_mon+1,utc_time.tm_mday,
     utc_time.tm_hour,utc_time.tm_min,utc_time.tm_sec);
@@ -3268,11 +3268,15 @@ static MagickBooleanType WritePDFImage(const ImageInfo *image_info,Image *image,
   (void) FormatLocaleString(buffer,MagickPathExtent,"/Root %.20g 0 R\n",(double)
     root_id);
   (void) WriteBlobString(image,buffer);
-  (void) SignatureImage(image,exception);
-  (void) FormatLocaleString(buffer,MagickPathExtent,"/ID [<%s> <%s>]\n",
-    GetImageProperty(image,"signature",exception),
-    GetImageProperty(image,"signature",exception));
-  (void) WriteBlobString(image,buffer);
+  option=GetImageOption(image_info,"pdf:no-identifier");
+  if (IsStringFalse(option) != MagickFalse)
+    {
+      (void) SignatureImage(image,exception);
+      (void) FormatLocaleString(buffer,MagickPathExtent,"/ID [<%s> <%s>]\n",
+        GetImageProperty(image,"signature",exception),
+        GetImageProperty(image,"signature",exception));
+      (void) WriteBlobString(image,buffer);
+    }
   (void) WriteBlobString(image,">>\n");
   (void) WriteBlobString(image,"startxref\n");
   (void) FormatLocaleString(buffer,MagickPathExtent,"%.20g\n",(double) offset);

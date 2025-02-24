@@ -97,10 +97,6 @@ extern "C" {
 #if defined(MAGICKWAND_WINDOWS_SUPPORT) && defined(_DEBUG)
 #define _CRTDBG_MAP_ALLOC
 #endif
-
-#if defined(MAGICKWAND_WINDOWS_SUPPORT) && defined(_DEBUG)
-#define _CRTDBG_MAP_ALLOC
-#endif
 #if defined(MAGICKWAND_WINDOWS_SUPPORT)
 # include <io.h>
 #if !defined(__CYGWIN__)
@@ -135,11 +131,9 @@ extern "C" {
 #endif
 
 #if defined(MAGICKCORE_HAVE_CL_CL_H)
-#  include <CL/cl.h>
 #  define MAGICKCORE_OPENCL_SUPPORT  1
 #endif
 #if defined(MAGICKCORE_HAVE_OPENCL_CL_H)
-#  include <OpenCL/cl.h>
 #  define MAGICKCORE_OPENCL_SUPPORT  1
 #endif
 

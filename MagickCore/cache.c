@@ -61,6 +61,7 @@
 #include "MagickCore/option.h"
 #include "MagickCore/pixel.h"
 #include "MagickCore/pixel-accessor.h"
+#include "MagickCore/pixel-private.h"
 #include "MagickCore/policy.h"
 #include "MagickCore/quantum.h"
 #include "MagickCore/random_.h"
@@ -202,13 +203,9 @@ MagickPrivate Cache AcquirePixelCache(const size_t number_threads)
   cache_info->number_threads=number_threads;
   if (GetOpenMPMaximumThreads() > cache_info->number_threads)
     cache_info->number_threads=GetOpenMPMaximumThreads();
-  if (GetMagickResourceLimit(ThreadResource) > cache_info->number_threads)
-    cache_info->number_threads=(size_t) GetMagickResourceLimit(ThreadResource);
   if (cache_info->number_threads == 0)
     cache_info->number_threads=1;
   cache_info->nexus_info=AcquirePixelCacheNexus(cache_info->number_threads);
-  if (cache_info->nexus_info == (NexusInfo **) NULL)
-    ThrowFatalException(ResourceLimitFatalError,"MemoryAllocationFailed");
   value=GetEnvironmentValue("MAGICK_SYNCHRONIZE");
   if (value != (const char *) NULL)
     {
@@ -471,8 +468,8 @@ static MagickBooleanType ClipPixelCacheNexus(Image *image,
           }
           SetPixelAlpha(image,GetPixelAlpha(image,p),q);
         }
-      p+=GetPixelChannels(image);
-      q+=GetPixelChannels(image);
+      p+=(ptrdiff_t) GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
   }
   return(MagickTrue);
@@ -731,7 +728,7 @@ static MagickBooleanType ClonePixelCacheRepository(
   status=MagickTrue;
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) shared(status) \
-    cache_number_threads(cache_info,clone_info,(int) cache_info->rows,1)
+    cache_number_threads(cache_info,clone_info,(int) cache_info->rows,4)
 #endif
   for (y=0; y < (ssize_t) cache_info->rows; y++)
   {
@@ -797,7 +794,7 @@ static MagickBooleanType ClonePixelCacheRepository(
               *q=*(p+cache_info->channel_map[channel].offset);
             q++;
           }
-          p+=cache_info->number_channels;
+          p+=(ptrdiff_t) cache_info->number_channels;
         }
       }
     status=WritePixelCachePixels(clone_info,clone_nexus[id],exception);
@@ -812,7 +809,7 @@ static MagickBooleanType ClonePixelCacheRepository(
         clone_info->metacontent_extent);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static) shared(status) \
-        cache_number_threads(cache_info,clone_info,(int) cache_info->rows,1)
+        cache_number_threads(cache_info,clone_info,(int) cache_info->rows,4)
 #endif
       for (y=0; y < (ssize_t) cache_info->rows; y++)
       {
@@ -1696,6 +1693,9 @@ static Cache GetImagePixelCache(Image *image,const MagickBooleanType clone,
 
   if (IsImageTTLExpired(image) != MagickFalse)
     {
+#if defined(ESTALE)
+      errno=ESTALE;
+#endif
       (void) ThrowMagickException(exception,GetMagickModule(),
         ResourceLimitError,"TimeLimitExceeded","`%s'",image->filename);
       return((Cache) NULL);
@@ -2678,11 +2678,11 @@ static inline ssize_t EdgeY(const ssize_t y,const size_t rows)
   return(y);
 }
 
-static inline MagickBooleanType IsOffsetOverflow(const ssize_t x,
-  const ssize_t y)
+static inline MagickBooleanType IsOffsetOverflow(const MagickOffsetType x,
+  const MagickOffsetType y)
 {
-  if (((y > 0) && (x > (MAGICK_SSIZE_MAX-y))) ||
-      ((y < 0) && (x < (MAGICK_SSIZE_MIN-y))))
+  if (((y > 0) && (x > ((MagickOffsetType) MAGICK_SSIZE_MAX-y))) ||
+      ((y < 0) && (x < ((MagickOffsetType) MAGICK_SSIZE_MIN-y))))
     return(MagickFalse);
   return(MagickTrue);
 }
@@ -2780,7 +2780,7 @@ MagickPrivate const Quantum *GetVirtualPixelCacheNexus(const Image *image,
   if (IsValidPixelOffset(nexus_info->region.y,cache_info->columns) == MagickFalse)
     return((const Quantum *) NULL);
   offset=nexus_info->region.y*(MagickOffsetType) cache_info->columns;
-  if (IsOffsetOverflow(offset,nexus_info->region.x) == MagickFalse)
+  if (IsOffsetOverflow(offset,(MagickOffsetType) nexus_info->region.x) == MagickFalse)
     return((const Quantum *) NULL);
   offset+=nexus_info->region.x;
   length=(MagickSizeType) (nexus_info->region.height-1L)*cache_info->columns+
@@ -3067,11 +3067,11 @@ MagickPrivate const Quantum *GetVirtualPixelCacheNexus(const Image *image,
             break;
           (void) memcpy(q,p,(size_t) (cache_info->number_channels*length*
             sizeof(*p)));
-          q+=cache_info->number_channels;
+          q+=(ptrdiff_t) cache_info->number_channels;
           if ((s != (void *) NULL) && (r != (const void *) NULL))
             {
               (void) memcpy(s,r,(size_t) cache_info->metacontent_extent);
-              s+=cache_info->metacontent_extent;
+              s+=(ptrdiff_t) cache_info->metacontent_extent;
             }
           continue;
         }
@@ -3085,11 +3085,11 @@ MagickPrivate const Quantum *GetVirtualPixelCacheNexus(const Image *image,
       r=GetVirtualMetacontentFromNexus(cache_info,virtual_nexus);
       (void) memcpy(q,p,(size_t) (cache_info->number_channels*length*
         sizeof(*p)));
-      q+=cache_info->number_channels*length;
+      q+=(ptrdiff_t) cache_info->number_channels*length;
       if ((r != (void *) NULL) && (s != (const void *) NULL))
         {
           (void) memcpy(s,r,(size_t) length);
-          s+=length*cache_info->metacontent_extent;
+          s+=(ptrdiff_t) length*cache_info->metacontent_extent;
         }
     }
     if (u < (ssize_t) columns)
@@ -3458,8 +3458,8 @@ static MagickBooleanType MaskPixelCacheNexus(Image *image,NexusInfo *nexus_info,
           continue;
         q[i]=ApplyPixelCompositeMask(q[i],alpha,p[i],GetPixelAlpha(image,p));
       }
-      p+=GetPixelChannels(image);
-      q+=GetPixelChannels(image);
+      p+=(ptrdiff_t) GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
   }
   return(MagickTrue);
@@ -3563,10 +3563,10 @@ static inline MagickOffsetType WritePixelCacheRegion(
   {
 #if !defined(MAGICKCORE_HAVE_PWRITE)
     count=write(cache_info->file,buffer+i,(size_t) MagickMin(length-
-      (MagickSizeType) i,MAGICK_SSIZE_MAX));
+      (MagickSizeType) i,MagickMaxBufferExtent));
 #else
     count=pwrite(cache_info->file,buffer+i,(size_t) MagickMin(length-
-      (MagickSizeType) i,MAGICK_SSIZE_MAX),offset+i);
+      (MagickSizeType) i,MagickMaxBufferExtent),offset+i);
 #endif
     if (count <= 0)
       {
@@ -3677,7 +3677,7 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
 #else
           (void) ThrowMagickException(exception,GetMagickModule(),
             MissingDelegateError,"DelegateLibrarySupportNotBuiltIn",
-            "'%s' (policy requires anonymous memory mapping)",image->filename);
+            "`%s' (policy requires anonymous memory mapping)",image->filename);
 #endif
         }
       value=DestroyString(value);
@@ -3688,14 +3688,12 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
   assert(cache_info->signature == MagickCoreSignature);
   if (((MagickSizeType) image->columns > cache_info->width_limit) ||
       ((MagickSizeType) image->rows > cache_info->height_limit))
-    ThrowBinaryException(ImageError,"WidthOrHeightExceedsLimit",
-      image->filename);
-  if (GetPixelChannels(image) >= MaxPixelChannels)
-    ThrowBinaryException(CorruptImageError,"MaximumChannelsExceeded",
-      image->filename);
-  if (GetPixelMetaChannels(image) >= (MaxPixelChannels-MetaPixelChannels))
-    ThrowBinaryException(CorruptImageError,"MaximumChannelsExceeded",
-      image->filename);
+    {
+      (void) ThrowMagickException(exception,GetMagickModule(),ImageError,
+        "WidthOrHeightExceedsLimit","`%s' (%.20gx%.20g)",image->filename,
+        (double) cache_info->width_limit,(double) cache_info->height_limit);
+      return(MagickFalse);
+    }
   if (GetMagickResourceLimit(ListLengthResource) != MagickResourceInfinity)
     {
       length=GetImageListLength(image);
@@ -3713,7 +3711,9 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
   cache_info->channels=image->channels;
   cache_info->rows=image->rows;
   cache_info->columns=image->columns;
-  InitializePixelChannelMap(image);
+  status=ResetPixelChannelMap(image,exception);
+  if (status == MagickFalse)
+    return(MagickFalse);
   cache_info->number_channels=GetPixelChannels(image);
   (void) memcpy(cache_info->channel_map,image->channel_map,MaxPixelChannels*
     sizeof(*image->channel_map));
@@ -3802,6 +3802,9 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
               cache_info->storage_class=image->storage_class;
               if (status == 0)
                 {
+                  if ((source_info.storage_class != UndefinedClass) &&
+                      (mode != ReadMode))
+                    RelinquishPixelCachePixels(&source_info);
                   cache_info->type=UndefinedCache;
                   return(MagickFalse);
                 }
@@ -3868,12 +3871,17 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
                 }
               if (status == 0)
                 {
+                  if ((source_info.storage_class != UndefinedClass) &&
+                      (mode != ReadMode))
+                    RelinquishPixelCachePixels(&source_info);
                   cache_info->type=UndefinedCache;
                   return(MagickFalse);
                 }
               return(MagickTrue);
             }
         }
+      if ((source_info.storage_class != UndefinedClass) && (mode != ReadMode))
+        RelinquishPixelCachePixels(&source_info);
       cache_info->type=UndefinedCache;
       (void) ThrowMagickException(exception,GetMagickModule(),CacheError,
         "CacheResourcesExhausted","`%s'",image->filename);
@@ -3884,6 +3892,8 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
   */
   if (status == MagickFalse)
     {
+      if ((source_info.storage_class != UndefinedClass) && (mode != ReadMode))
+        RelinquishPixelCachePixels(&source_info);
       cache_info->type=UndefinedCache;
       (void) ThrowMagickException(exception,GetMagickModule(),CacheError,
         "CacheResourcesExhausted","`%s'",image->filename);
@@ -3897,6 +3907,8 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
     }
   if (OpenPixelCacheOnDisk(cache_info,mode) == MagickFalse)
     {
+      if ((source_info.storage_class != UndefinedClass) && (mode != ReadMode))
+        RelinquishPixelCachePixels(&source_info);
       cache_info->type=UndefinedCache;
       ThrowFileException(exception,CacheError,"UnableToOpenPixelCache",
         image->filename);
@@ -3906,6 +3918,8 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
     cache_info->length);
   if (status == MagickFalse)
     {
+      if ((source_info.storage_class != UndefinedClass) && (mode != ReadMode))
+        RelinquishPixelCachePixels(&source_info);
       cache_info->type=UndefinedCache;
       ThrowFileException(exception,CacheError,"UnableToExtendCache",
         image->filename);
@@ -3963,6 +3977,9 @@ static MagickBooleanType OpenPixelCache(Image *image,const MapMode mode,
                 }
               if (status == 0)
                 {
+                  if ((source_info.storage_class != UndefinedClass) &&
+                      (mode != ReadMode))
+                    RelinquishPixelCachePixels(&source_info);
                   cache_info->type=UndefinedCache;
                   return(MagickFalse);
                 }
@@ -4398,10 +4415,10 @@ static inline MagickOffsetType ReadPixelCacheRegion(
   {
 #if !defined(MAGICKCORE_HAVE_PREAD)
     count=read(cache_info->file,buffer+i,(size_t) MagickMin(length-
-      (MagickSizeType) i,(size_t) MAGICK_SSIZE_MAX));
+      (MagickSizeType) i,(size_t) MagickMaxBufferExtent));
 #else
     count=pread(cache_info->file,buffer+i,(size_t) MagickMin(length-
-      (MagickSizeType) i,(size_t) MAGICK_SSIZE_MAX),offset+i);
+      (MagickSizeType) i,(size_t) MagickMaxBufferExtent),offset+i);
 #endif
     if (count <= 0)
       {
@@ -4470,8 +4487,8 @@ static MagickBooleanType ReadPixelCacheMetacontent(
       for (y=0; y < (ssize_t) rows; y++)
       {
         (void) memcpy(q,p,(size_t) length);
-        p+=cache_info->metacontent_extent*cache_info->columns;
-        q+=cache_info->metacontent_extent*nexus_info->region.width;
+        p+=(ptrdiff_t) cache_info->metacontent_extent*cache_info->columns;
+        q+=(ptrdiff_t) cache_info->metacontent_extent*nexus_info->region.width;
       }
       break;
     }
@@ -4505,7 +4522,7 @@ static MagickBooleanType ReadPixelCacheMetacontent(
         if (count != (MagickOffsetType) length)
           break;
         offset+=(MagickOffsetType) cache_info->columns;
-        q+=cache_info->metacontent_extent*nexus_info->region.width;
+        q+=(ptrdiff_t) cache_info->metacontent_extent*nexus_info->region.width;
       }
       if (IsFileDescriptorLimitExceeded() != MagickFalse)
         (void) ClosePixelCacheOnDisk(cache_info);
@@ -4536,7 +4553,7 @@ static MagickBooleanType ReadPixelCacheMetacontent(
           cache_info->server_info,&region,length,(unsigned char *) q);
         if (count != (MagickOffsetType) length)
           break;
-        q+=cache_info->metacontent_extent*nexus_info->region.width;
+        q+=(ptrdiff_t) cache_info->metacontent_extent*nexus_info->region.width;
         region.y++;
       }
       UnlockSemaphoreInfo(cache_info->file_semaphore);
@@ -4615,7 +4632,7 @@ static MagickBooleanType ReadPixelCachePixels(
   if (IsValidPixelOffset(nexus_info->region.y,cache_info->columns) == MagickFalse)
     return(MagickFalse);
   offset=nexus_info->region.y*(MagickOffsetType) cache_info->columns;
-  if ((offset/(MagickOffsetType) cache_info->columns) != nexus_info->region.y)
+  if ((ssize_t) (offset/cache_info->columns) != nexus_info->region.y)
     return(MagickFalse);
   offset+=nexus_info->region.x;
   number_channels=cache_info->number_channels;
@@ -4651,8 +4668,8 @@ static MagickBooleanType ReadPixelCachePixels(
       for (y=0; y < (ssize_t) rows; y++)
       {
         (void) memcpy(q,p,(size_t) length);
-        p+=cache_info->number_channels*cache_info->columns;
-        q+=cache_info->number_channels*nexus_info->region.width;
+        p+=(ptrdiff_t) cache_info->number_channels*cache_info->columns;
+        q+=(ptrdiff_t) cache_info->number_channels*nexus_info->region.width;
       }
       break;
     }
@@ -4683,7 +4700,7 @@ static MagickBooleanType ReadPixelCachePixels(
         if (count != (MagickOffsetType) length)
           break;
         offset+=(MagickOffsetType) cache_info->columns;
-        q+=cache_info->number_channels*nexus_info->region.width;
+        q+=(ptrdiff_t) cache_info->number_channels*nexus_info->region.width;
       }
       if (IsFileDescriptorLimitExceeded() != MagickFalse)
         (void) ClosePixelCacheOnDisk(cache_info);
@@ -4714,7 +4731,7 @@ static MagickBooleanType ReadPixelCachePixels(
           cache_info->server_info,&region,length,(unsigned char *) q);
         if (count != (MagickOffsetType) length)
           break;
-        q+=cache_info->number_channels*nexus_info->region.width;
+        q+=(ptrdiff_t) cache_info->number_channels*nexus_info->region.width;
         region.y++;
       }
       UnlockSemaphoreInfo(cache_info->file_semaphore);
@@ -5223,7 +5240,7 @@ static MagickBooleanType SetCacheAlphaChannel(Image *image,const Quantum alpha,
   image_view=AcquireVirtualCacheView(image,exception);  /* must be virtual */
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) shared(status) \
-    magick_number_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,2)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -5244,7 +5261,7 @@ static MagickBooleanType SetCacheAlphaChannel(Image *image,const Quantum alpha,
     for (x=0; x < (ssize_t) image->columns; x++)
     {
       SetPixelAlpha(image,alpha,q);
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     status=SyncCacheViewAuthenticPixels(image_view,exception);
   }
@@ -5651,8 +5668,8 @@ static MagickBooleanType WritePixelCacheMetacontent(CacheInfo *cache_info,
       for (y=0; y < (ssize_t) rows; y++)
       {
         (void) memcpy(q,p,(size_t) length);
-        p+=nexus_info->region.width*cache_info->metacontent_extent;
-        q+=cache_info->columns*cache_info->metacontent_extent;
+        p+=(ptrdiff_t) nexus_info->region.width*cache_info->metacontent_extent;
+        q+=(ptrdiff_t) cache_info->columns*cache_info->metacontent_extent;
       }
       break;
     }
@@ -5685,7 +5702,7 @@ static MagickBooleanType WritePixelCacheMetacontent(CacheInfo *cache_info,
           (const unsigned char *) p);
         if (count != (MagickOffsetType) length)
           break;
-        p+=cache_info->metacontent_extent*nexus_info->region.width;
+        p+=(ptrdiff_t) cache_info->metacontent_extent*nexus_info->region.width;
         offset+=(MagickOffsetType) cache_info->columns;
       }
       if (IsFileDescriptorLimitExceeded() != MagickFalse)
@@ -5717,7 +5734,7 @@ static MagickBooleanType WritePixelCacheMetacontent(CacheInfo *cache_info,
           cache_info->server_info,&region,length,(const unsigned char *) p);
         if (count != (MagickOffsetType) length)
           break;
-        p+=cache_info->metacontent_extent*nexus_info->region.width;
+        p+=(ptrdiff_t) cache_info->metacontent_extent*nexus_info->region.width;
         region.y++;
       }
       UnlockSemaphoreInfo(cache_info->file_semaphore);
@@ -5824,8 +5841,8 @@ static MagickBooleanType WritePixelCachePixels(
       for (y=0; y < (ssize_t) rows; y++)
       {
         (void) memcpy(q,p,(size_t) length);
-        p+=cache_info->number_channels*nexus_info->region.width;
-        q+=cache_info->number_channels*cache_info->columns;
+        p+=(ptrdiff_t) cache_info->number_channels*nexus_info->region.width;
+        q+=(ptrdiff_t) cache_info->number_channels*cache_info->columns;
       }
       break;
     }
@@ -5855,7 +5872,7 @@ static MagickBooleanType WritePixelCachePixels(
           sizeof(*p),length,(const unsigned char *) p);
         if (count != (MagickOffsetType) length)
           break;
-        p+=cache_info->number_channels*nexus_info->region.width;
+        p+=(ptrdiff_t) cache_info->number_channels*nexus_info->region.width;
         offset+=(MagickOffsetType) cache_info->columns;
       }
       if (IsFileDescriptorLimitExceeded() != MagickFalse)
@@ -5887,7 +5904,7 @@ static MagickBooleanType WritePixelCachePixels(
           cache_info->server_info,&region,length,(const unsigned char *) p);
         if (count != (MagickOffsetType) length)
           break;
-        p+=cache_info->number_channels*nexus_info->region.width;
+        p+=(ptrdiff_t) cache_info->number_channels*nexus_info->region.width;
         region.y++;
       }
       UnlockSemaphoreInfo(cache_info->file_semaphore);

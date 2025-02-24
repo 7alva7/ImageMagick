@@ -340,7 +340,8 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
     */
     number_planes_filled=(number_planes % 2 == 0) ? number_planes :
       number_planes+1;
-    if (((MagickSizeType) number_pixels*number_planes_filled) != (size_t) (number_pixels*number_planes_filled))
+    if ((number_pixels*number_planes_filled) !=
+        (MagickSizeType) (((size_t) number_pixels*number_planes_filled)))
       ThrowRLEException(ResourceLimitError,"MemoryAllocationFailed");
     pixel_info=AcquireVirtualMemory(image->columns,image->rows*
       MagickMax(number_planes_filled,4)*sizeof(*pixels));
@@ -454,7 +455,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
             if ((y < (ssize_t) image->rows) &&
                 ((x+i) < (ssize_t) image->columns))
               *p=pixel;
-            p+=number_planes;
+            p+=(ptrdiff_t) number_planes;
           }
           if (operand & 0x01)
             (void) ReadBlobByte(image);
@@ -486,7 +487,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
             if ((y < (ssize_t) image->rows) &&
                 ((x+i) < (ssize_t) image->columns))
               *p=pixel;
-            p+=number_planes;
+            p+=(ptrdiff_t) number_planes;
           }
           x+=operand;
           break;
@@ -550,7 +551,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
             SetPixelBlue(image,ScaleCharToQuantum(*p++),q);
             if (image->alpha_trait != UndefinedPixelTrait)
               SetPixelAlpha(image,ScaleCharToQuantum(*p++),q);
-            q+=GetPixelChannels(image);
+            q+=(ptrdiff_t) GetPixelChannels(image);
           }
           if (SyncAuthenticPixels(image,exception) == MagickFalse)
             break;
@@ -612,7 +613,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
               for (x=0; x < (ssize_t) image->columns; x++)
               {
                 SetPixelIndex(image,(Quantum) *p++,q);
-                q+=GetPixelChannels(image);
+                q+=(ptrdiff_t) GetPixelChannels(image);
               }
               if (SyncAuthenticPixels(image,exception) == MagickFalse)
                 break;
@@ -648,7 +649,7 @@ static Image *ReadRLEImage(const ImageInfo *image_info,ExceptionInfo *exception)
                 SetPixelBlue(image,ClampToQuantum(image->colormap[(ssize_t)
                   index].blue),q);
                 SetPixelAlpha(image,ScaleCharToQuantum(*p++),q);
-                q+=GetPixelChannels(image);
+                q+=(ptrdiff_t) GetPixelChannels(image);
               }
               if (x < (ssize_t) image->columns)
                 break;

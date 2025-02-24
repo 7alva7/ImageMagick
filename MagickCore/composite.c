@@ -74,6 +74,7 @@
 #include "MagickCore/resample.h"
 #include "MagickCore/resource_.h"
 #include "MagickCore/string_.h"
+#include "MagickCore/string-private.h"
 #include "MagickCore/thread-private.h"
 #include "MagickCore/threshold.h"
 #include "MagickCore/token.h"
@@ -281,9 +282,9 @@ static Image *BlendMagnitudeImage(const Image *dx_image,const Image *dy_image,
         r[i]=ClampToQuantum(hypot((double) p[i],(double)
           GetPixelChannel(dy_image,channel,q)));
       }
-      p+=GetPixelChannels(dx_image);
-      q+=GetPixelChannels(dy_image);
-      r+=GetPixelChannels(magnitude_image);
+      p+=(ptrdiff_t) GetPixelChannels(dx_image);
+      q+=(ptrdiff_t) GetPixelChannels(dy_image);
+      r+=(ptrdiff_t) GetPixelChannels(magnitude_image);
     }
     if (SyncCacheViewAuthenticPixels(magnitude_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -380,11 +381,11 @@ static Image *BlendMaxMagnitudeImage(const Image *alpha_image,
         else
           t[i]=GetPixelChannel(dy_image,channel,s);
       }
-      p+=GetPixelChannels(alpha_image);
-      q+=GetPixelChannels(beta_image);
-      r+=GetPixelChannels(dx_image);
-      s+=GetPixelChannels(dy_image);
-      t+=GetPixelChannels(magnitude_image);
+      p+=(ptrdiff_t) GetPixelChannels(alpha_image);
+      q+=(ptrdiff_t) GetPixelChannels(beta_image);
+      r+=(ptrdiff_t) GetPixelChannels(dx_image);
+      s+=(ptrdiff_t) GetPixelChannels(dy_image);
+      t+=(ptrdiff_t) GetPixelChannels(magnitude_image);
     }
     if (SyncCacheViewAuthenticPixels(magnitude_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -471,9 +472,9 @@ static Image *BlendSumImage(const Image *alpha_image,const Image *beta_image,
         r[i]=ClampToQuantum(attenuate*((double) p[i]+sign*
           (double) GetPixelChannel(beta_image,channel,q)));
       }
-      p+=GetPixelChannels(alpha_image);
-      q+=GetPixelChannels(beta_image);
-      r+=GetPixelChannels(sum_image);
+      p+=(ptrdiff_t) GetPixelChannels(alpha_image);
+      q+=(ptrdiff_t) GetPixelChannels(beta_image);
+      r+=(ptrdiff_t) GetPixelChannels(sum_image);
     }
     if (SyncCacheViewAuthenticPixels(sum_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -634,7 +635,7 @@ static MagickBooleanType BlendMaskAlphaChannel(Image *image,
   mask_view=AcquireVirtualCacheView(mask_image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) shared(status) \
-    magick_number_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,2)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -666,8 +667,8 @@ static MagickBooleanType BlendMaskAlphaChannel(Image *image,
 
       if (fabs((double) alpha) >= MagickEpsilon)
         q[i]=(Quantum) 0;
-      p+=GetPixelChannels(mask_image);
-      q+=GetPixelChannels(image);
+      p+=(ptrdiff_t) GetPixelChannels(mask_image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -728,7 +729,7 @@ static Image *BlendMeanImage(Image *image,const Image *mask_image,
           continue;
         mean[i]+=QuantumScale*(double) p[i];
       }
-      p+=GetPixelChannels(image);
+      p+=(ptrdiff_t) GetPixelChannels(image);
     }
   }
   alpha_view=DestroyCacheView(alpha_view);
@@ -747,7 +748,7 @@ static Image *BlendMeanImage(Image *image,const Image *mask_image,
   mean_view=AcquireAuthenticCacheView(mean_image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) shared(status) \
-    magick_number_threads(mask_image,mean_image,mean_image->rows,1)
+    magick_number_threads(mask_image,mean_image,mean_image->rows,4)
 #endif
   for (y=0; y < (ssize_t) mean_image->rows; y++)
   {
@@ -791,8 +792,8 @@ static Image *BlendMeanImage(Image *image,const Image *mask_image,
           if (fabs((double) alpha) >= MagickEpsilon)
             q[i]=ClampToQuantum(mean[i]);
       }
-      p+=GetPixelChannels(mask_image);
-      q+=GetPixelChannels(mean_image);
+      p+=(ptrdiff_t) GetPixelChannels(mask_image);
+      q+=(ptrdiff_t) GetPixelChannels(mean_image);
     }
     if (SyncCacheViewAuthenticPixels(mean_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -868,8 +869,8 @@ static MagickBooleanType BlendRMSEResidual(const Image *alpha_image,
       if ((GetPixelReadMask(alpha_image,p) <= (QuantumRange/2)) ||
           (GetPixelReadMask(beta_image,q) <= (QuantumRange/2)))
         {
-          p+=GetPixelChannels(alpha_image);
-          q+=GetPixelChannels(beta_image);
+          p+=(ptrdiff_t) GetPixelChannels(alpha_image);
+          q+=(ptrdiff_t) GetPixelChannels(beta_image);
           continue;
         }
       Sa=QuantumScale*(double) GetPixelAlpha(alpha_image,p);
@@ -895,8 +896,8 @@ static MagickBooleanType BlendRMSEResidual(const Image *alpha_image,
         channel_residual+=distance*distance;
       }
       local_area++;
-      p+=GetPixelChannels(alpha_image);
-      q+=GetPixelChannels(beta_image);
+      p+=(ptrdiff_t) GetPixelChannels(alpha_image);
+      q+=(ptrdiff_t) GetPixelChannels(beta_image);
     }
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
     #pragma omp critical (MagickCore_BlendRMSEResidual)
@@ -911,46 +912,6 @@ static MagickBooleanType BlendRMSEResidual(const Image *alpha_image,
   alpha_view=DestroyCacheView(alpha_view);
   *residual=sqrt(*residual*area/(double) GetImageChannels(alpha_image));
   return(status);
-}
-
-static void CompositeHCL(const MagickRealType red,const MagickRealType green,
-  const MagickRealType blue,MagickRealType *hue,MagickRealType *chroma,
-  MagickRealType *luma)
-{
-  MagickRealType
-    b,
-    c,
-    g,
-    h,
-    max,
-    r;
-
-  /*
-    Convert RGB to HCL colorspace.
-  */
-  assert(hue != (MagickRealType *) NULL);
-  assert(chroma != (MagickRealType *) NULL);
-  assert(luma != (MagickRealType *) NULL);
-  r=red;
-  g=green;
-  b=blue;
-  max=MagickMax(r,MagickMax(g,b));
-  c=max-(MagickRealType) MagickMin(r,MagickMin(g,b));
-  h=0.0;
-  if (c == 0)
-    h=0.0;
-  else
-    if (red == max)
-      h=fmod((g-b)/c+6.0,6.0);
-    else
-      if (green == max)
-        h=((b-r)/c)+2.0;
-      else
-        if (blue == max)
-          h=((r-g)/c)+4.0;
-  *hue=(h/6.0);
-  *chroma=QuantumScale*c;
-  *luma=QuantumScale*(0.298839*r+0.586811*g+0.114350*b);
 }
 
 static MagickBooleanType CompositeOverImage(Image *image,
@@ -1017,7 +978,7 @@ static MagickBooleanType CompositeOverImage(Image *image,
       {
         if (y < y_offset)
           continue;
-        if ((y-(double) y_offset) >= (double) source_image->rows)
+        if ((y-y_offset) >= (ssize_t) source_image->rows)
           continue;
       }
     /*
@@ -1026,10 +987,10 @@ static MagickBooleanType CompositeOverImage(Image *image,
     pixels=(Quantum *) NULL;
     p=(Quantum *) NULL;
     if ((y >= y_offset) &&
-        ((y-(double) y_offset) < (double) source_image->rows))
+        ((y-y_offset) < (ssize_t) source_image->rows))
       {
         p=GetCacheViewVirtualPixels(source_view,0,
-          CastDoubleToLong(y-(double) y_offset),source_image->columns,1,
+          CastDoubleToLong((double) y-y_offset),source_image->columns,1,
           exception);
         if (p == (const Quantum *) NULL)
           {
@@ -1038,7 +999,7 @@ static MagickBooleanType CompositeOverImage(Image *image,
           }
         pixels=p;
         if (x_offset < 0)
-          p-=CastDoubleToLong((double) x_offset*GetPixelChannels(source_image));
+          p-=(ptrdiff_t)CastDoubleToLong((double) x_offset*GetPixelChannels(source_image));
       }
     q=GetCacheViewAuthenticPixels(image_view,0,y,image->columns,1,exception);
     if (q == (Quantum *) NULL)
@@ -1072,14 +1033,14 @@ static MagickBooleanType CompositeOverImage(Image *image,
         {
           if (x < x_offset)
             {
-              q+=GetPixelChannels(image);
+              q+=(ptrdiff_t) GetPixelChannels(image);
               continue;
             }
-          if ((x-(double) x_offset) >= (double) source_image->columns)
+          if ((x-x_offset) >= (ssize_t) source_image->columns)
             break;
         }
       if ((pixels == (Quantum *) NULL) || (x < x_offset) ||
-          ((x-(double) x_offset) >= (double) source_image->columns))
+          ((x-x_offset) >= (ssize_t) source_image->columns))
         {
           Quantum
             source[MaxPixelChannels];
@@ -1090,8 +1051,8 @@ static MagickBooleanType CompositeOverImage(Image *image,
               Dc: canvas color.
           */
           (void) GetOneVirtualPixel(source_image,
-            CastDoubleToLong(x-(double) x_offset),
-            CastDoubleToLong(y-(double) y_offset),source,exception);
+            CastDoubleToLong((double) x-x_offset),
+            CastDoubleToLong((double) y-y_offset),source,exception);
           for (i=0; i < (ssize_t) GetPixelChannels(image); i++)
           {
             MagickRealType
@@ -1111,7 +1072,7 @@ static MagickBooleanType CompositeOverImage(Image *image,
             q[i]=clamp != MagickFalse ? ClampPixel(pixel) :
               ClampToQuantum(pixel);
           }
-          q+=GetPixelChannels(image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
           continue;
         }
       /*
@@ -1170,11 +1131,11 @@ static MagickBooleanType CompositeOverImage(Image *image,
         pixel=(double) QuantumRange*gamma*(Sca+Dca*(1.0-Sa));
         q[i]=clamp != MagickFalse ? ClampPixel(pixel) : ClampToQuantum(pixel);
       }
-      p+=GetPixelChannels(source_image);
+      p+=(ptrdiff_t) GetPixelChannels(source_image);
       channels=GetPixelChannels(source_image);
       if (p >= (pixels+channels*source_image->columns))
         p=pixels;
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -1195,72 +1156,6 @@ static MagickBooleanType CompositeOverImage(Image *image,
   source_view=DestroyCacheView(source_view);
   image_view=DestroyCacheView(image_view);
   return(status);
-}
-
-static void HCLComposite(const MagickRealType hue,const MagickRealType chroma,
-  const MagickRealType luma,MagickRealType *red,MagickRealType *green,
-  MagickRealType *blue)
-{
-  MagickRealType
-    b,
-    c,
-    g,
-    h,
-    m,
-    r,
-    x;
-
-  /*
-    Convert HCL to RGB colorspace.
-  */
-  assert(red != (MagickRealType *) NULL);
-  assert(green != (MagickRealType *) NULL);
-  assert(blue != (MagickRealType *) NULL);
-  h=6.0*hue;
-  c=chroma;
-  x=c*(1.0-fabs(fmod(h,2.0)-1.0));
-  r=0.0;
-  g=0.0;
-  b=0.0;
-  if ((0.0 <= h) && (h < 1.0))
-    {
-      r=c;
-      g=x;
-    }
-  else
-    if ((1.0 <= h) && (h < 2.0))
-      {
-        r=x;
-        g=c;
-      }
-    else
-      if ((2.0 <= h) && (h < 3.0))
-        {
-          g=c;
-          b=x;
-        }
-      else
-        if ((3.0 <= h) && (h < 4.0))
-          {
-            g=x;
-            b=c;
-          }
-        else
-          if ((4.0 <= h) && (h < 5.0))
-            {
-              r=x;
-              b=c;
-            }
-          else
-            if ((5.0 <= h) && (h < 6.0))
-              {
-                r=c;
-                b=x;
-              }
-  m=luma-(0.298839*r+0.586811*g+0.114350*b);
-  *red=(double) QuantumRange*(r+m);
-  *green=(double) QuantumRange*(g+m);
-  *blue=(double) QuantumRange*(b+m);
 }
 
 static MagickBooleanType SaliencyBlendImage(Image *image,
@@ -1289,7 +1184,7 @@ static MagickBooleanType SaliencyBlendImage(Image *image,
       y_offset
     };
 
-  size_t
+  ssize_t
     i;
 
   /*
@@ -1341,7 +1236,7 @@ static MagickBooleanType SaliencyBlendImage(Image *image,
   verbose=IsStringTrue(GetImageArtifact(image,"verbose"));
   if (verbose != MagickFalse)
     (void) FormatLocaleFile(stderr,"saliency blending:\n");
-  for (i=0; i < iterations; i++)
+  for (i=0; i < (ssize_t) iterations; i++)
   {
     double
       residual = 1.0;
@@ -1421,7 +1316,7 @@ static MagickBooleanType SeamlessBlendImage(Image *image,
       y_offset
     };
 
-  size_t
+  ssize_t
     i;
 
   /*
@@ -1474,7 +1369,7 @@ static MagickBooleanType SeamlessBlendImage(Image *image,
   verbose=IsStringTrue(GetImageArtifact(image,"verbose"));
   if (verbose != MagickFalse)
     (void) FormatLocaleFile(stderr,"seamless blending:\n");
-  for (i=0; i < iterations; i++)
+  for (i=0; i < (ssize_t) iterations; i++)
   {
     double
       residual = 1.0;
@@ -1537,11 +1432,20 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
     *source_view,
     *image_view;
 
+  ColorspaceType
+    colorspace = HCLColorspace;
+
   const char
-    *value;
+    *artifact;
+
+  double
+    white_luminance = 10000.0;
 
   GeometryInfo
     geometry_info;
+
+  IlluminantType
+    illuminant = D65Illuminant;
 
   Image
     *canvas_image,
@@ -1592,14 +1496,44 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
   amount=0.5;
   canvas_image=(Image *) NULL;
   canvas_dissolve=1.0;
+  white_luminance=10000.0;
+  artifact=GetImageArtifact(image,"compose:white-luminance");
+  if (artifact != (const char *) NULL)
+    white_luminance=StringToDouble(artifact,(char **) NULL);
+  artifact=GetImageArtifact(image,"compose:illuminant");
+  if (artifact != (const char *) NULL)
+    {
+      ssize_t
+        illuminant_type;
+
+      illuminant_type=ParseCommandOption(MagickIlluminantOptions,MagickFalse,
+        artifact);
+      if (illuminant_type < 0)
+        illuminant=UndefinedIlluminant;
+      else
+        illuminant=(IlluminantType) illuminant_type;
+    }
+  artifact=GetImageArtifact(image,"compose:colorspace");
+  if (artifact != (const char *) NULL)
+    {
+      ssize_t
+        colorspace_type;
+
+      colorspace_type=ParseCommandOption(MagickColorspaceOptions,MagickFalse,
+        artifact);
+      if (colorspace_type < 0)
+        colorspace=UndefinedColorspace;
+      else
+        colorspace=(ColorspaceType) colorspace_type;
+    }
   clamp=MagickTrue;
-  value=GetImageArtifact(image,"compose:clamp");
-  if (value != (const char *) NULL)
-    clamp=IsStringTrue(value);
+  artifact=GetImageArtifact(image,"compose:clamp");
+  if (artifact != (const char *) NULL)
+    clamp=IsStringTrue(artifact);
   compose_sync=MagickTrue;
-  value=GetImageArtifact(image,"compose:sync");
-  if (value != (const char *) NULL)
-    compose_sync=IsStringTrue(value);
+  artifact=GetImageArtifact(image,"compose:sync");
+  if (artifact != (const char *) NULL)
+    compose_sync=IsStringTrue(artifact);
   SetGeometryInfo(&geometry_info);
   percent_luma=100.0;
   percent_chroma=100.0;
@@ -1623,7 +1557,7 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
       image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static) shared(status) \
-        magick_number_threads(source_image,image,source_image->rows,1)
+        magick_number_threads(source_image,image,source_image->rows,4)
 #endif
       for (y=0; y < (ssize_t) source_image->rows; y++)
       {
@@ -1657,8 +1591,8 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
 
           if (GetPixelReadMask(source_image,p) <= (QuantumRange/2))
             {
-              p+=GetPixelChannels(source_image);
-              q+=GetPixelChannels(image);
+              p+=(ptrdiff_t) GetPixelChannels(source_image);
+              q+=(ptrdiff_t) GetPixelChannels(image);
               continue;
             }
           for (i=0; i < (ssize_t) GetPixelChannels(source_image); i++)
@@ -1672,8 +1606,8 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
               continue;
             SetPixelChannel(image,channel,p[i],q);
           }
-          p+=GetPixelChannels(source_image);
-          q+=GetPixelChannels(image);
+          p+=(ptrdiff_t) GetPixelChannels(source_image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
         }
         sync=SyncCacheViewAuthenticPixels(image_view,exception);
         if (sync == MagickFalse)
@@ -1707,7 +1641,7 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
       image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
       #pragma omp parallel for schedule(static) shared(status) \
-        magick_number_threads(source_image,image,source_image->rows,1)
+        magick_number_threads(source_image,image,source_image->rows,4)
 #endif
       for (y=0; y < (ssize_t) source_image->rows; y++)
       {
@@ -1738,15 +1672,15 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         {
           if (GetPixelReadMask(source_image,p) <= (QuantumRange/2))
             {
-              p+=GetPixelChannels(source_image);
-              q+=GetPixelChannels(image);
+              p+=(ptrdiff_t) GetPixelChannels(source_image);
+              q+=(ptrdiff_t) GetPixelChannels(image);
               continue;
             }
           SetPixelAlpha(image,clamp != MagickFalse ?
             ClampPixel(GetPixelIntensity(source_image,p)) :
             ClampToQuantum(GetPixelIntensity(source_image,p)),q);
-          p+=GetPixelChannels(source_image);
-          q+=GetPixelChannels(image);
+          p+=(ptrdiff_t) GetPixelChannels(source_image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
         }
         sync=SyncCacheViewAuthenticPixels(image_view,exception);
         if (sync == MagickFalse)
@@ -1813,13 +1747,13 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         Gather the maximum blur sigma values from user.
       */
       flags=NoValue;
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (const char *) NULL)
-        flags=ParseGeometry(value,&geometry_info);
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (const char *) NULL)
+        flags=ParseGeometry(artifact,&geometry_info);
       if ((flags & WidthValue) == 0)
         {
           (void) ThrowMagickException(exception,GetMagickModule(),OptionWarning,
-            "InvalidSetting","'%s' '%s'","compose:args",value);
+            "InvalidSetting","'%s' '%s'","compose:args",artifact);
           source_image=DestroyImage(source_image);
           canvas_image=DestroyImage(canvas_image);
           return(MagickFalse);
@@ -1907,7 +1841,7 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         {
           if (((x_offset+x) < 0) || ((x_offset+x) >= (ssize_t) image->columns))
             {
-              p+=GetPixelChannels(source_image);
+              p+=(ptrdiff_t) GetPixelChannels(source_image);
               continue;
             }
           if (fabs(angle_range) > MagickEpsilon)
@@ -1930,8 +1864,8 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
           (void) ResamplePixelColor(resample_filter,(double) x_offset+x,
             (double) y_offset+y,&pixel,exception);
           SetPixelViaPixelInfo(canvas_image,&pixel,q);
-          p+=GetPixelChannels(source_image);
-          q+=GetPixelChannels(canvas_image);
+          p+=(ptrdiff_t) GetPixelChannels(source_image);
+          q+=(ptrdiff_t) GetPixelChannels(canvas_image);
         }
         sync=SyncCacheViewAuthenticPixels(canvas_view,exception);
         if (sync == MagickFalse)
@@ -1974,9 +1908,9 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         }
       SetGeometryInfo(&geometry_info);
       flags=NoValue;
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (char *) NULL)
-        flags=ParseGeometry(value,&geometry_info);
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (char *) NULL)
+        flags=ParseGeometry(artifact,&geometry_info);
       if ((flags & (WidthValue | HeightValue)) == 0 )
         {
           if ((flags & AspectValue) == 0)
@@ -2078,7 +2012,7 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         {
           if (((x_offset+x) < 0) || ((x_offset+x) >= (ssize_t) image->columns))
             {
-              p+=GetPixelChannels(source_image);
+              p+=(ptrdiff_t) GetPixelChannels(source_image);
               continue;
             }
           /*
@@ -2103,8 +2037,8 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
           pixel.alpha=(MagickRealType) QuantumRange*(QuantumScale*pixel.alpha)*
             (QuantumScale*(double) GetPixelAlpha(source_image,p));
           SetPixelViaPixelInfo(canvas_image,&pixel,q);
-          p+=GetPixelChannels(source_image);
-          q+=GetPixelChannels(canvas_image);
+          p+=(ptrdiff_t) GetPixelChannels(source_image);
+          q+=(ptrdiff_t) GetPixelChannels(canvas_image);
         }
         if (x < (ssize_t) source_image->columns)
           break;
@@ -2124,10 +2058,10 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
       /*
         Geometry arguments to dissolve factors.
       */
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (char *) NULL)
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (char *) NULL)
         {
-          flags=ParseGeometry(value,&geometry_info);
+          flags=ParseGeometry(artifact,&geometry_info);
           source_dissolve=geometry_info.rho/100.0;
           canvas_dissolve=1.0;
           if ((source_dissolve-MagickEpsilon) < 0.0)
@@ -2148,10 +2082,10 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
     }
     case BlendCompositeOp:
     {
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (char *) NULL)
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (char *) NULL)
         {
-          flags=ParseGeometry(value,&geometry_info);
+          flags=ParseGeometry(artifact,&geometry_info);
           source_dissolve=geometry_info.rho/100.0;
           canvas_dissolve=1.0-source_dissolve;
           if ((flags & SigmaValue) != 0)
@@ -2168,10 +2102,10 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
      size_t
         tick = 100;
 
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (char *) NULL)
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (char *) NULL)
         {
-          flags=ParseGeometry(value,&geometry_info);
+          flags=ParseGeometry(artifact,&geometry_info);
           iterations=geometry_info.rho;
           if ((flags & SigmaValue) != 0)
             residual_threshold=geometry_info.sigma;
@@ -2189,13 +2123,13 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         residual_threshold = 0.0002,
         iterations = 400.0;
 
-     size_t
+      size_t
         tick = 100;
 
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (char *) NULL)
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (char *) NULL)
         {
-          flags=ParseGeometry(value,&geometry_info);
+          flags=ParseGeometry(artifact,&geometry_info);
           iterations=geometry_info.rho;
           if ((flags & SigmaValue) != 0)
             residual_threshold=geometry_info.sigma;
@@ -2218,13 +2152,13 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         number of values)
       */
       SetGeometryInfo(&geometry_info);
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (char *) NULL)
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (char *) NULL)
         {
-          flags=ParseGeometry(value,&geometry_info);
+          flags=ParseGeometry(artifact,&geometry_info);
           if (flags == NoValue)
             (void) ThrowMagickException(exception,GetMagickModule(),OptionError,
-              "InvalidGeometry","`%s'",value);
+              "InvalidGeometry","`%s'",artifact);
         }
       break;
     }
@@ -2233,10 +2167,10 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
       /*
         Determine the luma and chroma scale.
       */
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (char *) NULL)
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (char *) NULL)
         {
-          flags=ParseGeometry(value,&geometry_info);
+          flags=ParseGeometry(artifact,&geometry_info);
           percent_luma=geometry_info.rho;
           if ((flags & SigmaValue) != 0)
             percent_chroma=geometry_info.sigma;
@@ -2248,10 +2182,10 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
       /*
         Determine the amount and threshold.
       */
-      value=GetImageArtifact(image,"compose:args");
-      if (value != (char *) NULL)
+      artifact=GetImageArtifact(image,"compose:args");
+      if (artifact != (char *) NULL)
         {
-          flags=ParseGeometry(value,&geometry_info);
+          flags=ParseGeometry(artifact,&geometry_info);
           amount=geometry_info.rho;
           threshold=geometry_info.sigma;
           if ((flags & SigmaValue) == 0)
@@ -2307,7 +2241,7 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
       {
         if (y < y_offset)
           continue;
-        if ((y-(double) y_offset) >= (double) source_image->rows)
+        if ((y-y_offset) >= (ssize_t) source_image->rows)
           continue;
       }
     /*
@@ -2316,10 +2250,10 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
     pixels=(Quantum *) NULL;
     p=(Quantum *) NULL;
     if ((y >= y_offset) &&
-        ((y-(double) y_offset) < (double) source_image->rows))
+        ((y-y_offset) < (ssize_t) source_image->rows))
       {
         p=GetCacheViewVirtualPixels(source_view,0,
-          CastDoubleToLong(y-(double) y_offset),source_image->columns,1,
+          CastDoubleToLong((double) y-y_offset),source_image->columns,1,
           exception);
         if (p == (const Quantum *) NULL)
           {
@@ -2328,7 +2262,7 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
           }
         pixels=p;
         if (x_offset < 0)
-          p-=CastDoubleToLong((double) x_offset*GetPixelChannels(source_image));
+          p-=(ptrdiff_t) CastDoubleToLong((double) x_offset*GetPixelChannels(source_image));
       }
     q=GetCacheViewAuthenticPixels(image_view,0,y,image->columns,1,exception);
     if (q == (Quantum *) NULL)
@@ -2366,14 +2300,14 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         {
           if (x < x_offset)
             {
-              q+=GetPixelChannels(image);
+              q+=(ptrdiff_t) GetPixelChannels(image);
               continue;
             }
-          if ((x-(double) x_offset) >= (double) source_image->columns)
+          if ((x-x_offset) >= (ssize_t) source_image->columns)
             break;
         }
       if ((pixels == (Quantum *) NULL) || (x < x_offset) ||
-          ((x-(double) x_offset) >= (double) source_image->columns))
+          ((x-x_offset) >= (ssize_t) source_image->columns))
         {
           Quantum
             source[MaxPixelChannels];
@@ -2384,8 +2318,8 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
               Dc: canvas color.
           */
           (void) GetOneVirtualPixel(source_image,
-            CastDoubleToLong(x-(double) x_offset),
-            CastDoubleToLong(y-(double) y_offset),source,exception);
+            CastDoubleToLong((double) x-x_offset),
+            CastDoubleToLong((double) y-y_offset),source,exception);
           for (i=0; i < (ssize_t) GetPixelChannels(image); i++)
           {
             MagickRealType
@@ -2446,7 +2380,7 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
             q[i]=clamp != MagickFalse ? ClampPixel(pixel) :
               ClampToQuantum(pixel);
           }
-          q+=GetPixelChannels(image);
+          q+=(ptrdiff_t) GetPixelChannels(image);
           continue;
         }
       /*
@@ -2906,11 +2840,14 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
                 pixel=Sc;
                 break;
               }
-            CompositeHCL(canvas_pixel.red,canvas_pixel.green,canvas_pixel.blue,
-              &sans,&sans,&luma);
-            CompositeHCL(source_pixel.red,source_pixel.green,source_pixel.blue,
-              &hue,&chroma,&sans);
-            HCLComposite(hue,chroma,luma,&red,&green,&blue);
+            ConvertRGBToGeneric(colorspace,(double) canvas_pixel.red,
+              (double) canvas_pixel.green,(double) canvas_pixel.blue,
+              white_luminance,illuminant,&sans,&sans,&luma);
+            ConvertRGBToGeneric(colorspace,(double) source_pixel.red,
+              (double) source_pixel.green,(double) source_pixel.blue,
+              white_luminance,illuminant,&hue,&chroma,&sans);
+            ConvertGenericToRGB(colorspace,hue,chroma,luma,
+              white_luminance,illuminant,&red,&green,&blue);
             switch (channel)
             {
               case RedPixelChannel: pixel=red; break;
@@ -3114,11 +3051,14 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
                 pixel=Sc;
                 break;
               }
-            CompositeHCL(canvas_pixel.red,canvas_pixel.green,canvas_pixel.blue,
-              &hue,&chroma,&luma);
-            CompositeHCL(source_pixel.red,source_pixel.green,source_pixel.blue,
-              &hue,&sans,&sans);
-            HCLComposite(hue,chroma,luma,&red,&green,&blue);
+            ConvertRGBToGeneric(colorspace,(double) canvas_pixel.red,
+              (double) canvas_pixel.green,(double) canvas_pixel.blue,
+              white_luminance,illuminant,&hue,&chroma,&luma);
+            ConvertRGBToGeneric(colorspace,(double) source_pixel.red,
+              (double) source_pixel.green,(double) source_pixel.blue,
+              white_luminance,illuminant,&hue,&sans,&sans);
+            ConvertGenericToRGB(colorspace,hue,chroma,luma,
+              white_luminance,illuminant,&red,&green,&blue);
             switch (channel)
             {
               case RedPixelChannel: pixel=red; break;
@@ -3209,11 +3149,14 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
                 pixel=Sc;
                 break;
               }
-            CompositeHCL(canvas_pixel.red,canvas_pixel.green,canvas_pixel.blue,
-              &hue,&chroma,&luma);
-            CompositeHCL(source_pixel.red,source_pixel.green,source_pixel.blue,
-              &sans,&sans,&luma);
-            HCLComposite(hue,chroma,luma,&red,&green,&blue);
+            ConvertRGBToGeneric(colorspace,(double) canvas_pixel.red,
+              (double) canvas_pixel.green,(double) canvas_pixel.blue,
+              white_luminance,illuminant,&hue,&chroma,&luma);
+            ConvertRGBToGeneric(colorspace,(double) source_pixel.red,
+              (double) source_pixel.green,(double) source_pixel.blue,
+              white_luminance,illuminant,&sans,&sans,&luma);
+            ConvertGenericToRGB(colorspace,hue,chroma,luma,
+              white_luminance,illuminant,&red,&green,&blue);
             switch (channel)
             {
               case RedPixelChannel: pixel=red; break;
@@ -3296,11 +3239,13 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
                 pixel=Dc;
                 break;
               }
-            CompositeHCL(canvas_pixel.red,canvas_pixel.green,canvas_pixel.blue,
-              &hue,&chroma,&luma);
+            ConvertRGBToGeneric(colorspace,(double) canvas_pixel.red,
+              (double) canvas_pixel.green,(double) canvas_pixel.blue,
+              white_luminance,illuminant,&hue,&chroma,&luma);
             luma+=(0.01*percent_luma*offset)/midpoint;
             chroma*=0.01*percent_chroma;
-            HCLComposite(hue,chroma,luma,&red,&green,&blue);
+            ConvertGenericToRGB(colorspace,hue,chroma,luma,
+              white_luminance,illuminant,&red,&green,&blue);
             switch (channel)
             {
               case RedPixelChannel: pixel=red; break;
@@ -3482,11 +3427,14 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
                 pixel=Sc;
                 break;
               }
-            CompositeHCL(canvas_pixel.red,canvas_pixel.green,canvas_pixel.blue,
-              &hue,&chroma,&luma);
-            CompositeHCL(source_pixel.red,source_pixel.green,source_pixel.blue,
-              &sans,&chroma,&sans);
-            HCLComposite(hue,chroma,luma,&red,&green,&blue);
+            ConvertRGBToGeneric(colorspace,(double) canvas_pixel.red,
+              (double) canvas_pixel.green,(double) canvas_pixel.blue,
+              white_luminance,illuminant,&hue,&chroma,&luma);
+            ConvertRGBToGeneric(colorspace,(double) source_pixel.red,
+              (double) source_pixel.green,(double) source_pixel.blue,
+              white_luminance,illuminant,&sans,&chroma,&sans);
+            ConvertGenericToRGB(colorspace,hue,chroma,luma,
+              white_luminance,illuminant,&red,&green,&blue);
             switch (channel)
             {
               case RedPixelChannel: pixel=red; break;
@@ -3613,11 +3561,11 @@ MagickExport MagickBooleanType CompositeImage(Image *image,
         }
         q[i]=clamp != MagickFalse ? ClampPixel(pixel) : ClampToQuantum(pixel);
       }
-      p+=GetPixelChannels(source_image);
+      p+=(ptrdiff_t) GetPixelChannels(source_image);
       channels=GetPixelChannels(source_image);
       if (p >= (pixels+channels*source_image->columns))
         p=pixels;
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
       status=MagickFalse;
@@ -3756,7 +3704,7 @@ MagickExport MagickBooleanType TextureImage(Image *image,const Image *texture,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) shared(status) \
-    magick_number_threads(texture_image,image,image->rows,1)
+    magick_number_threads(texture_image,image,image->rows,2)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -3812,8 +3760,8 @@ MagickExport MagickBooleanType TextureImage(Image *image,const Image *texture,
             continue;
           SetPixelChannel(image,channel,p[i],q);
         }
-        p+=GetPixelChannels(texture_image);
-        q+=GetPixelChannels(image);
+        p+=(ptrdiff_t) GetPixelChannels(texture_image);
+        q+=(ptrdiff_t) GetPixelChannels(image);
       }
     }
     sync=SyncCacheViewAuthenticPixels(image_view,exception);

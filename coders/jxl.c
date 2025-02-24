@@ -54,6 +54,7 @@
 #include "MagickCore/monitor.h"
 #include "MagickCore/monitor-private.h"
 #include "MagickCore/option.h"
+#include "MagickCore/profile-private.h"
 #include "MagickCore/property.h"
 #include "MagickCore/resource_.h"
 #include "MagickCore/static.h"
@@ -64,6 +65,7 @@
 #include <jxl/decode.h>
 #include <jxl/encode.h>
 #include <jxl/thread_parallel_runner.h>
+#include <jxl/version.h>
 #endif
 
 /*
@@ -84,7 +86,7 @@ typedef struct MemoryManagerInfo
 */
 static MagickBooleanType
   WriteJXLImage(const ImageInfo *,Image *,ExceptionInfo *);
-
+
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
@@ -274,7 +276,72 @@ static inline void JXLInitImage(Image *image,JxlBasicInfo *basic_info)
     }
 }
 
-static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
+static inline MagickBooleanType JXLPatchExifProfile(StringInfo *exif_profile)
+{
+  size_t
+    exif_length;
+
+  StringInfo
+    *snippet;
+
+  unsigned char
+    *exif_datum;
+
+  unsigned int
+    offset=0;
+
+  if (GetStringInfoLength(exif_profile) < 4)
+    return(MagickFalse);
+
+  /*
+    Extract and cache Exif profile.
+  */
+  snippet=SplitStringInfo(exif_profile,4);
+  offset|=(unsigned int) (*(GetStringInfoDatum(snippet)+0)) << 24;
+  offset|=(unsigned int) (*(GetStringInfoDatum(snippet)+1)) << 16;
+  offset|=(unsigned int) (*(GetStringInfoDatum(snippet)+2)) << 8;
+  offset|=(unsigned int) (*(GetStringInfoDatum(snippet)+3)) << 0;
+  snippet=DestroyStringInfo(snippet);
+  /*
+    Strip any EOI marker if payload starts with a JPEG marker.
+  */
+  exif_length=GetStringInfoLength(exif_profile);
+  exif_datum=GetStringInfoDatum(exif_profile);
+  if ((exif_length > 2) && 
+      ((memcmp(exif_datum,"\xff\xd8",2) == 0) ||
+        (memcmp(exif_datum,"\xff\xe1",2) == 0)) &&
+      (memcmp(exif_datum+exif_length-2,"\xff\xd9",2) == 0))
+    SetStringInfoLength(exif_profile,exif_length-2);
+  /*
+    Skip to actual Exif payload.
+  */
+  if (offset < GetStringInfoLength(exif_profile))
+    (void) DestroyStringInfo(SplitStringInfo(exif_profile,offset));
+  return(MagickTrue);
+}
+
+static inline void JXLAddProfilesToImage(Image *image,
+  StringInfo **exif_profile,StringInfo **xmp_profile,ExceptionInfo *exception)
+{
+  if (*exif_profile != (StringInfo *) NULL)
+    {
+      if (JXLPatchExifProfile(*exif_profile) != MagickFalse)
+        {
+          (void) SetImageProfilePrivate(image,*exif_profile,exception);
+          *exif_profile=(StringInfo *) NULL;
+        }
+      else
+        *exif_profile=DestroyStringInfo(*exif_profile);
+    }
+  if (*xmp_profile != (StringInfo *) NULL)
+    {
+      (void) SetImageProfilePrivate(image,*xmp_profile,exception);
+      *xmp_profile=(StringInfo *) NULL;
+    }
+}
+
+static Image *ReadJXLImage(const ImageInfo *image_info,
+  ExceptionInfo *exception)
 {
   Image
     *image;
@@ -337,8 +404,8 @@ static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
   /*
     Initialize JXL delegate library.
   */
-  memset(&basic_info,0,sizeof(basic_info));
-  memset(&pixel_format,0,sizeof(pixel_format));
+  (void) memset(&basic_info,0,sizeof(basic_info));
+  (void) memset(&pixel_format,0,sizeof(pixel_format));
   JXLSetMemoryManager(&memory_manager,&memory_manager_info,image,exception);
   jxl_info=JxlDecoderCreate(&memory_manager);
   if (jxl_info == (JxlDecoder *) NULL)
@@ -402,7 +469,7 @@ static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
 
         remaining=JxlDecoderReleaseInput(jxl_info);
         if (remaining > 0)
-          memmove(pixels,pixels+input_size-remaining,remaining);
+          (void) memmove(pixels,pixels+input_size-remaining,remaining);
         count=ReadBlob(image,input_size-remaining,pixels+remaining);
         if (count <= 0)
           {
@@ -446,7 +513,7 @@ static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
         StringInfo
           *profile;
 
-        memset(&color_encoding,0,sizeof(color_encoding));
+        (void) memset(&color_encoding,0,sizeof(color_encoding));
         JXLSetFormat(image,&pixel_format,exception);
 #if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0,9,0)
         jxl_status=JxlDecoderGetColorAsEncodedProfile(jxl_info,
@@ -536,19 +603,23 @@ static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
 #endif
         if (jxl_status != JXL_DEC_SUCCESS)
           break;
-        profile=AcquireStringInfo(profile_size);
-#if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0,9,0)
-        jxl_status=JxlDecoderGetColorAsICCProfile(jxl_info,
-          JXL_COLOR_PROFILE_TARGET_ORIGINAL,GetStringInfoDatum(profile),
-          profile_size);
+        profile=AcquireProfileStringInfo("icc",profile_size,exception);
+        if (profile != (StringInfo *) NULL)
+          {
+  #if JPEGXL_NUMERIC_VERSION >= JPEGXL_COMPUTE_NUMERIC_VERSION(0,9,0)
+            jxl_status=JxlDecoderGetColorAsICCProfile(jxl_info,
+              JXL_COLOR_PROFILE_TARGET_ORIGINAL,GetStringInfoDatum(profile),
+              profile_size);
 #else
-        jxl_status=JxlDecoderGetColorAsICCProfile(jxl_info,&pixel_format,
-          JXL_COLOR_PROFILE_TARGET_ORIGINAL,GetStringInfoDatum(profile),
-          profile_size);
+            jxl_status=JxlDecoderGetColorAsICCProfile(jxl_info,&pixel_format,
+              JXL_COLOR_PROFILE_TARGET_ORIGINAL,GetStringInfoDatum(profile),
+              profile_size);
 #endif
-        if (jxl_status == JXL_DEC_SUCCESS)
-          (void) SetImageProfile(image,"icm",profile,exception);
-        profile=DestroyStringInfo(profile);
+            if (jxl_status == JXL_DEC_SUCCESS)
+              (void) SetImageProfilePrivate(image,profile,exception);
+            else
+              profile=DestroyStringInfo(profile);
+          }
         if (jxl_status == JXL_DEC_SUCCESS)
           jxl_status=JXL_DEC_COLOR_ENCODING;
         break;
@@ -557,6 +628,7 @@ static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
       {
         if (image_count++ != 0)
           {
+            JXLAddProfilesToImage(image,&exif_profile,&xmp_profile,exception);
             /*
               Allocate next image structure.
             */
@@ -573,6 +645,7 @@ static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
         status=SetImageExtent(image,image->columns,image->rows,exception);
         if (status == MagickFalse)
           break;
+        (void) ResetImagePixels(image,exception);
         JXLSetFormat(image,&pixel_format,exception);
         if (extent == 0)
           {
@@ -651,18 +724,28 @@ static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
             /*
               Read Exif profile.
             */
-            exif_profile=AcquireStringInfo((size_t) size);
-            jxl_status=JxlDecoderSetBoxBuffer(jxl_info,
-              GetStringInfoDatum(exif_profile),size);
+          if (exif_profile == (StringInfo *) NULL)
+            {
+              exif_profile=AcquireProfileStringInfo("exif",(size_t) size,
+                exception);
+              if (exif_profile != (StringInfo *) NULL)
+                jxl_status=JxlDecoderSetBoxBuffer(jxl_info,
+                  GetStringInfoDatum(exif_profile),size);
+            }
           }
         if (LocaleNCompare(type,"xml ",sizeof(type)) == 0)
           {
             /*
               Read XMP profile.
             */
-            xmp_profile=AcquireStringInfo((size_t) size);
-            jxl_status=JxlDecoderSetBoxBuffer(jxl_info,
-              GetStringInfoDatum(xmp_profile),size);
+            if (xmp_profile == (StringInfo *) NULL)
+              {
+                xmp_profile=AcquireProfileStringInfo("xmp",(size_t) size,
+                  exception);
+                if (xmp_profile != (StringInfo *) NULL)
+                  jxl_status=JxlDecoderSetBoxBuffer(jxl_info,
+                    GetStringInfoDatum(xmp_profile),size);
+              }
           }
         if (jxl_status == JXL_DEC_SUCCESS)
           jxl_status=JXL_DEC_BOX;
@@ -681,56 +764,7 @@ static Image *ReadJXLImage(const ImageInfo *image_info,ExceptionInfo *exception)
     }
   }
   (void) JxlDecoderReleaseBoxBuffer(jxl_info);
-  if ((exif_profile != (StringInfo *) NULL) &&
-      (GetStringInfoLength(exif_profile) > 4))
-    {
-      size_t
-        exif_length;
-
-      StringInfo
-        *snippet;
-
-      unsigned char
-        *exif_datum;
-
-      unsigned int
-        offset=0;
-
-      /*
-        Extract and cache Exif profile.
-      */
-      snippet=SplitStringInfo(exif_profile,4);
-      offset|=(unsigned int) (*(GetStringInfoDatum(snippet)+0)) << 24;
-      offset|=(unsigned int) (*(GetStringInfoDatum(snippet)+1)) << 16;
-      offset|=(unsigned int) (*(GetStringInfoDatum(snippet)+2)) << 8;
-      offset|=(unsigned int) (*(GetStringInfoDatum(snippet)+3)) << 0;
-      snippet=DestroyStringInfo(snippet);
-      /*
-        Strip any EOI marker if payload starts with a JPEG marker.
-      */
-      exif_length=GetStringInfoLength(exif_profile);
-      exif_datum=GetStringInfoDatum(exif_profile);
-      if ((exif_length > 2) && 
-          ((memcmp(exif_datum,"\xff\xd8",2) == 0) ||
-           (memcmp(exif_datum,"\xff\xe1",2) == 0)) &&
-          (memcmp(exif_datum+exif_length-2,"\xff\xd9",2) == 0))
-        SetStringInfoLength(exif_profile,exif_length-2);
-      /*
-        Skip to actual Exif payload.
-      */
-      if (offset < GetStringInfoLength(exif_profile))
-        (void) DestroyStringInfo(SplitStringInfo(exif_profile,offset));
-      (void) SetImageProfile(image,"exif",exif_profile,exception);
-      exif_profile=DestroyStringInfo(exif_profile);
-    }
-  if (xmp_profile != (StringInfo *) NULL)
-    {
-      /*
-        Cache XMP profile.
-      */
-      (void) SetImageProfile(image,"xmp",xmp_profile,exception);
-      xmp_profile=DestroyStringInfo(xmp_profile);
-    }
+  JXLAddProfilesToImage(image,&exif_profile,&xmp_profile,exception);
   output_buffer=(unsigned char *) RelinquishMagickMemory(output_buffer);
   pixels=(unsigned char *) RelinquishMagickMemory(pixels);
   if (runner != NULL)
@@ -948,9 +982,9 @@ static MagickBooleanType WriteJXLImage(const ImageInfo *image_info,Image *image,
   /*
     Initialize JXL delegate library.
   */
-  memset(&basic_info,0,sizeof(basic_info));
-  memset(&frame_header,0,sizeof(frame_header));
-  memset(&pixel_format,0,sizeof(pixel_format));
+  (void) memset(&basic_info,0,sizeof(basic_info));
+  (void) memset(&frame_header,0,sizeof(frame_header));
+  (void) memset(&pixel_format,0,sizeof(pixel_format));
   JXLSetMemoryManager(&memory_manager,&memory_manager_info,image,exception);
   jxl_info=JxlEncoderCreate(&memory_manager);
   if (jxl_info == (JxlEncoder *) NULL)

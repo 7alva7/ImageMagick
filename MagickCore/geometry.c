@@ -487,6 +487,8 @@ MagickExport char *GetPageGeometry(const char *page_geometry)
     int
       status;
 
+    if (Pagesizes[i].extent == 0)
+      break;  /* sentinel */
     status=LocaleNCompare(Pagesizes[i].name,page_geometry,Pagesizes[i].extent);
     if (status == 0)
       {
@@ -562,7 +564,8 @@ MagickExport void GravityAdjustGeometry(const size_t width,
     case SouthGravity:
     case CenterGravity:
     {
-      region->x+=CastDoubleToLong(width/2.0-region->width/2.0);
+      region->x=CastDoubleToLong((double) width/2.0-region->width/2.0+
+        region->x);
       break;
     }
     case ForgetGravity:
@@ -585,7 +588,8 @@ MagickExport void GravityAdjustGeometry(const size_t width,
     case WestGravity:
     case CenterGravity:
     {
-      region->y+=CastDoubleToLong(height/2.0-region->height/2.0);
+      region->y=CastDoubleToLong((double) height/2.0-region->height/2.0+
+        region->y);
       break;
     }
     case ForgetGravity:
@@ -1634,9 +1638,9 @@ MagickExport MagickStatusType ParseMetaGeometry(const char *geometry,ssize_t *x,
         PerceptibleReciprocal(sqrt(area)));
       if ((scale.x < (double) *width) || (scale.y < (double) *height))
         {
-          *width=CastDoubleToUnsigned(stasis_width*PerceptibleReciprocal(
+          *width=CastDoubleToUnsigned((double) stasis_width*PerceptibleReciprocal(
             distance*PerceptibleReciprocal(sqrt(area)))+0.5);
-          *height=CastDoubleToUnsigned(stasis_height*PerceptibleReciprocal(
+          *height=CastDoubleToUnsigned((double) stasis_height*PerceptibleReciprocal(
             distance*PerceptibleReciprocal(sqrt(area)))+0.5);
         }
     }

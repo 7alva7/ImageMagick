@@ -17,7 +17,7 @@
 %                              August 2007                                    %
 %                                                                             %
 %                                                                             %
-%  Copyright @ 2007 ImageMagick Studio LLC, a non-profit organization         %
+%  Copyright @ 1999 ImageMagick Studio LLC, a non-profit organization         %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
@@ -49,6 +49,7 @@
 #include "MagickCore/matrix.h"
 #include "MagickCore/matrix-private.h"
 #include "MagickCore/memory_.h"
+#include "MagickCore/nt-base-private.h"
 #include "MagickCore/pixel-accessor.h"
 #include "MagickCore/resource_.h"
 #include "MagickCore/semaphore.h"
@@ -152,10 +153,10 @@ static inline MagickOffsetType WriteMatrixElements(
   {
 #if !defined(MAGICKCORE_HAVE_PWRITE)
     count=write(matrix_info->file,buffer+i,(size_t) MagickMin(length-
-      (MagickSizeType) i,(MagickSizeType) MAGICK_SSIZE_MAX));
+      (MagickSizeType) i,(MagickSizeType) MagickMaxBufferExtent));
 #else
     count=pwrite(matrix_info->file,buffer+i,(size_t) MagickMin(length-
-      (MagickSizeType) i,(MagickSizeType) MAGICK_SSIZE_MAX),offset+i);
+      (MagickSizeType) i,(MagickSizeType) MagickMaxBufferExtent),offset+i);
 #endif
     if (count <= 0)
       {
@@ -685,10 +686,10 @@ static inline MagickOffsetType ReadMatrixElements(
   {
 #if !defined(MAGICKCORE_HAVE_PREAD)
     count=read(matrix_info->file,buffer+i,(size_t) MagickMin(length-i,
-      (MagickSizeType) MAGICK_SSIZE_MAX));
+      (MagickSizeType) MagickMaxBufferExtent));
 #else
     count=pread(matrix_info->file,buffer+i,(size_t) MagickMin(length-
-      (MagickSizeType) i,(MagickSizeType) MAGICK_SSIZE_MAX),offset+i);
+      (MagickSizeType) i,(MagickSizeType) MagickMaxBufferExtent),offset+i);
 #endif
     if (count <= 0)
       {
@@ -941,7 +942,7 @@ MagickExport Image *MatrixToImage(const MatrixInfo *matrix_info,
   image_view=AcquireAuthenticCacheView(image,exception);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) shared(status) \
-    magick_number_threads(image,image,image->rows,1)
+    magick_number_threads(image,image,image->rows,2)
 #endif
   for (y=0; y < (ssize_t) image->rows; y++)
   {
@@ -968,7 +969,7 @@ MagickExport Image *MatrixToImage(const MatrixInfo *matrix_info,
         continue;
       value=scale_factor*(value-min_value);
       *q=ClampToQuantum(value);
-      q+=GetPixelChannels(image);
+      q+=(ptrdiff_t) GetPixelChannels(image);
     }
     if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
       status=MagickFalse;
